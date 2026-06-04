@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" class="light">
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<meta name="theme-color" content="#f3f3f6" />
+<meta name="theme-color" content="#15151d" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-title" content="VITAL" />
@@ -94,7 +94,7 @@
   .home-sec{font-size:15px;font-weight:800;margin:8px 4px 11px;letter-spacing:-.2px}
   .home-plans{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:2px}
   .plan-card{border-radius:18px;padding:13px 11px;min-height:114px;display:flex;flex-direction:column;justify-content:space-between;cursor:pointer;border:1px solid var(--line)}
-  .plan-ic{width:36px;height:36px;border-radius:11px;background:var(--card);display:flex;align-items:center;justify-content:center;font-size:18px}
+  .plan-ic{width:36px;height:36px;border-radius:11px;background:transparent;display:flex;align-items:center;justify-content:center;font-size:22px}
   .plan-card b{font-size:13.5px;line-height:1.15}
   .plan-card small{font-size:10.5px;color:var(--dim);display:block;margin-top:1px}
   .p-str{background:var(--tint-str)} .p-run{background:var(--tint-run)} .p-fuel{background:var(--tint-fuel)}
@@ -160,16 +160,22 @@
   label{display:block; font-size:13px; color:var(--dim); margin:14px 0 8px}
   label b{color:var(--text); font-weight:600}
   .val{float:right; color:var(--accent); font-weight:700; font-size:13px}
-  input[type="text"], input[type="number"], input[type="email"], input[type="file"], select, textarea{
+  input[type="text"], input[type="number"], input[type="email"], input[type="file"], input[type="date"], select, textarea{
     width:100%;background:var(--card2);border:2px solid var(--line);color:var(--text);
     border-radius:12px;padding:12px 14px;font-size:16px;font-family:inherit;margin-bottom:8px;
     transition:all 0.2s ease;cursor:text;
   }
-  input[type="text"]:focus, input[type="number"]:focus, input[type="email"]:focus, input[type="file"]:focus, select:focus, textarea:focus{
+  input[type="text"]:focus, input[type="number"]:focus, input[type="email"]:focus, input[type="file"]:focus, input[type="date"]:focus, select:focus, textarea:focus{
     border-color:var(--accent);background:var(--card);outline:none;box-shadow:0 0 0 3px rgba(45,212,191,0.1);
   }
   input::placeholder{color:var(--dim);opacity:0.6;}
   select{cursor:pointer;}
+  /* Date pickers — match the app's typography; keep the calendar icon visible in dark mode */
+  input[type="date"]{cursor:pointer;font-weight:600;letter-spacing:.2px}
+  input[type="date"]::-webkit-datetime-edit{color:var(--text);font-family:inherit;font-weight:600}
+  input[type="date"]::-webkit-datetime-edit-fields-wrapper{padding:0}
+  input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;opacity:.6;filter:invert(1)}
+  :root.light input[type="date"]::-webkit-calendar-picker-indicator{filter:none;opacity:.5}
   input[type="file"]::file-selector-button{background:var(--accent2);color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-weight:600;}
   textarea{resize:vertical;min-height:80px}
   input[type=range]{width:100%; -webkit-appearance:none; height:6px; border-radius:6px;
@@ -511,12 +517,6 @@
         <div class="stat-mid"><div class="stat-ring" id="slpRing"><div id="slpRingV">–</div></div><ul id="slpStats"></ul></div></div>
     </div>
 
-    <!-- featured -->
-    <div class="card feat-card" id="homeFeat" onclick="openCheckin()">
-      <div class="feat-play">▶</div>
-      <div><b id="featTitle">Morning check-in</b><small id="featSub">Log sleep, energy &amp; more → get your readiness</small></div>
-    </div>
-
     <!-- weekly trend -->
     <div class="card">
       <div class="trend-top"><b>This week · readiness</b><span class="dim" id="trendAvg"></span></div>
@@ -722,7 +722,7 @@
       <h2 id="coachTodayTitle">Today's workout</h2>
       <p class="hint">What your plan has for you today. Tick exercises as you go.</p>
       <div id="todayWorkout" class="empty">Loading…</div>
-      <div id="coachReco" class="hint" style="margin-top:14px">Do your morning check-in for a readiness-based intensity tweak.</div>
+      <div id="coachReco" class="hint" style="margin-top:14px"></div>
     </div>
     <div class="card" style="display:flex;align-items:center;gap:18px">
       <div class="mini-ring" id="weekRing"><div id="weekRingNum">0/0</div></div>
@@ -754,6 +754,15 @@
         <div>
           <h2 style="margin:0">💪 Workouts &amp; PBs</h2>
           <p class="hint" style="margin:4px 0 0" id="ctaWorkoutSummary">Log lifts and track your personal bests</p>
+        </div>
+        <span class="cta-arrow">→</span>
+      </div>
+    </div>
+    <div class="card cta-card" onclick="showTab('trainlog')">
+      <div class="cta-inner">
+        <div>
+          <h2 style="margin:0">📋 Training log</h2>
+          <p class="hint" style="margin:4px 0 0">Sessions you've completed — view, edit &amp; delete</p>
         </div>
         <span class="cta-arrow">→</span>
       </div>
@@ -795,7 +804,19 @@
       <p class="hint" id="dayDetailHint">Edit exercises, loads and rest. Saves automatically.</p>
       <div id="dayExercises"></div>
       <button class="ghost add-ex" onclick="dayAddItem()">+ Add exercise</button>
+      <button class="primary" style="width:100%;margin-top:14px" onclick="logDaySession()">✓ Save this session as done</button>
+      <button class="ghost" style="width:100%;margin-top:8px" onclick="showTab('trainlog')">📋 View training log</button>
     </div>
+  </section>
+
+  <!-- Training log (completed sessions) -->
+  <section class="tab" id="tab-trainlog">
+    <button class="ghost" style="margin:4px 0 2px" onclick="showTab('coach',document.querySelector('nav button[data-tab=&quot;coach&quot;]'))">← Back to Coach</button>
+    <div class="card">
+      <h2>📋 Training log</h2>
+      <p class="hint">Every session you mark done — from Today or your program — lands here. Tap one to view &amp; edit it.</p>
+    </div>
+    <div id="trainLogList"></div>
   </section>
 
   <!-- ========== FUEL ========== -->
@@ -1015,10 +1036,10 @@ function updateThemeButton(){
   document.querySelector('.theme-toggle').textContent=isLight?'☀️':'🌙';
 }
 function initTheme(){
-  // Light is the default; only go dark if the user explicitly chose it
+  // Dark is the default; only go light if the user explicitly chose it
   const saved=localStorage.getItem(THEME_KEY);
-  if(saved==='dark') document.documentElement.classList.remove('light');
-  else document.documentElement.classList.add('light');
+  if(saved==='light') document.documentElement.classList.add('light');
+  else document.documentElement.classList.remove('light');
   updateThemeButton();
 }
 
@@ -1129,8 +1150,9 @@ function showProfileView(){
       ${row('Thigh',val(p.thigh,' cm'))}
     </div>
     <div class="card">
-      <h2>Backup & restore</h2>
-      <p class="hint">Your data lives only in this browser. Download a backup file so clearing cache or switching browsers can never lose it — keep it in iCloud, email it to yourself, or save to a USB.</p>
+      <h2>Backup &amp; save</h2>
+      <div class="li" id="storageStatus" style="border:none;padding:4px 0 8px"></div>
+      <p class="hint">Your records are saved on this device. For real safety against a lost or wiped phone, download a backup and keep it in iCloud or email it to yourself.</p>
       <button class="primary" onclick="exportData()">⬇  Download my data</button>
       <button class="ghost" style="width:100%;margin-top:10px" onclick="document.getElementById('importFile').click()">⬆  Restore from a backup</button>
       <input type="file" id="importFile" accept="application/json,.json" style="display:none" onchange="importData(this)" />
@@ -1140,10 +1162,29 @@ function showProfileView(){
   $('profileView').innerHTML=html;
   const last=localStorage.getItem(BACKUP_STAMP_KEY);
   if(last) $('backupStamp').textContent='Last backup: '+new Date(last).toLocaleString();
+  renderStorageStatus();
 }
 
+// ===== DURABILITY: ask the browser to keep this data (not treat it as evictable cache) =====
+function requestPersist(){try{if(navigator.storage&&navigator.storage.persist){navigator.storage.persisted().then(p=>{if(!p)navigator.storage.persist().catch(()=>{});}).catch(()=>{});}}catch(e){}}
+function renderStorageStatus(){
+  const el=$('storageStatus');if(!el)return;
+  if(navigator.storage&&navigator.storage.persisted){
+    navigator.storage.persisted().then(p=>{
+      el.innerHTML = p
+        ? '<span class="e">🔒</span><div style="flex:1"><b>Storage protected</b><br><span>Your data is marked durable — the browser won\'t auto-clear it.</span></div>'
+        : '<span class="e">⚠️</span><div style="flex:1"><b>Not protected yet</b><br><span>Tap to stop the browser auto-clearing your data.</span></div><button class="ghost" style="padding:7px 11px;font-size:12px;width:auto" onclick="navigator.storage.persist().then(renderStorageStatus)">Protect</button>';
+    }).catch(()=>{el.innerHTML='';});
+  } else { el.innerHTML='<span class="e">💾</span><div style="flex:1"><b>Saved on this device</b><br><span>Download a backup to keep it safe off your phone.</span></div>'; }
+}
+function backupReminder(){
+  if(!localStorage.getItem('vital_profile_v2'))return;
+  const last=localStorage.getItem(BACKUP_STAMP_KEY);
+  const days=last?(Date.now()-new Date(last).getTime())/864e5:999;
+  if(days>14)setTimeout(()=>toast('💾 Time to back up — Profile → Backup → Download. Keep a copy in iCloud/email so a lost phone never loses your data.'),2600);
+}
 // ===== BACKUP / RESTORE =====
-const VITAL_KEYS=['vital_profile_v2','vital_entries_v2','vital_progress_v2','vital_labs_v1','vital_program_v1','vital_program_log_v1','vital_health_v1','vital_theme'];
+const VITAL_KEYS=['vital_profile_v2','vital_entries_v2','vital_progress_v2','vital_labs_v1','vital_program_v1','vital_program_log_v1','vital_sessions_v1','vital_health_v1','vital_theme'];
 const BACKUP_STAMP_KEY='vital_last_backup';
 function exportData(){
   const bundle={__vital_backup__:true,version:1,exportedAt:new Date().toISOString(),data:{}};
@@ -1347,6 +1388,7 @@ function compute(){
   saveEntry({date:todayKey(),score,feelScore,objective,blended,sleepH,sleepQ,energy,sore,mood,stress,mot,nurse,yday});
   renderTrends();
   if(typeof renderHome==='function')renderHome();
+  if(typeof renderCoachToday==='function')renderCoachToday();
 
   $('resultCard').style.display='block';
   if($('todayEmpty'))$('todayEmpty').style.display='none';
@@ -1457,7 +1499,7 @@ function renderHome(){
   for(let i=0;i<7;i++){const dt=new Date(monU);dt.setUTCDate(monU.getUTCDate()+i);const iso=dt.toISOString().slice(0,10);weekIsos.push(iso);const fut=iso>today;strip+=`<div class="hstrip-day${iso===dk?' on':''}${fut?' future':''}" onclick="selectHomeDay('${iso}')"><small>${wd[i]}</small><b>${dt.getUTCDate()}</b></div>`;}
   $('homeStrip').innerHTML=strip;
   // greeting subline: viewing today → show the training week; browsing a past day → that day's date
-  if($('homeDate'))$('homeDate').textContent=homeSelDate?new Date(dk+'T12:00:00Z').toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric',timeZone:'UTC'}):((prog&&prog.week)?('Week '+prog.week+' of 11'):'');
+  if($('homeDate'))$('homeDate').textContent=homeSelDate?new Date(dk+'T12:00:00Z').toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric',timeZone:'UTC'}):((prog&&prog.week)?('Week '+prog.week+' of '+(prog.blockWeeks||11)):'');
   // readiness hero for the SELECTED day (today falls back to the latest entry if not checked in yet)
   const entries=loadEntries().slice().sort((a,b)=>a.date<b.date?-1:1);
   const entry=homeSelDate?entries.find(e=>e.date===dk):(entries.find(e=>e.date===today)||entries[entries.length-1]);
@@ -1484,7 +1526,6 @@ function renderHome(){
     $('recoText').textContent=homeSelDate?'No data logged for this day.':'Your morning check-in drives today\'s training intensity.';
     $('homeFacts').textContent='';
   }
-  if($('featTitle')){const td=!homeSelDate&&entries.find(e=>e.date===today);$('featTitle').textContent=td?'Active recovery':'Morning check-in';$('featSub').textContent=td?'8-min mobility · hips & T-spine · breathe':'Log sleep, energy & more → get your readiness';}
   // plans for the selected day's weekday
   const selWd=DAY_KEYS[new Date(dk+'T12:00:00Z').getUTCDay()];
   const pday=prog?prog.days.find(d=>d.key===selWd):null;
@@ -1607,10 +1648,14 @@ function renderLifts(){
   const lifts=[...new Set(p.lifts.map(l=>l.liftName))];
   let html='';
   lifts.forEach(liftName=>{
-    const entries=p.lifts.filter(l=>l.liftName===liftName);
+    const entries=p.lifts.filter(l=>l.liftName===liftName).slice().sort((a,b)=>new Date(a.date)-new Date(b.date));
     const best=entries.reduce((a,b)=>b.weight>a.weight?b:a); // true PB = heaviest set
     const when=new Date(best.date).toLocaleDateString(undefined,{month:'short',day:'numeric'});
     html+=`<div class="pr-item"><div class="pr-name">${liftName}<br><span style="font-size:11px;color:var(--dim);font-weight:400">best ${best.sets}×${best.reps} · ${when}</span></div><div class="pr-weight">${best.weight}kg</div></div>`;
+    if(entries.length>=2){
+      const id='pbc_'+liftName.replace(/[^a-z0-9]/gi,'').toLowerCase();
+      html+=`<div style="margin:-2px 2px 16px">${miniLineSVG(entries.map(e=>e.weight),'var(--accent)',id)}</div>`;
+    }
   });
   $('liftsList').innerHTML=html||'<div class="empty">No lifts logged yet. Log your first one above.</div>';
   updateWorkoutCta();
@@ -2207,6 +2252,24 @@ function loadProgram(){try{return JSON.parse(localStorage.getItem(PROGRAM_KEY));
 function saveProgram(p){programState=p;localStorage.setItem(PROGRAM_KEY,JSON.stringify(p));}
 function loadProgramLog(){try{return JSON.parse(localStorage.getItem(PROGRAM_LOG_KEY))||{};}catch(e){return {};}}
 function saveProgramLog(l){localStorage.setItem(PROGRAM_LOG_KEY,JSON.stringify(l));}
+// ===== TRAINING LOG — completed sessions (one per run / strength), addable + deletable =====
+const SESS_KEY='vital_sessions_v1';
+function loadSessions(){try{return JSON.parse(localStorage.getItem(SESS_KEY))||[];}catch(e){return [];}}
+function saveSessions(a){localStorage.setItem(SESS_KEY,JSON.stringify(a));}
+function hasSession(date,type){return loadSessions().some(s=>s.date===date&&s.type===type);}
+function setSession(date,title,type,on,items){
+  let a=loadSessions();
+  if(on){ if(!a.some(s=>s.date===date&&s.type===type)) a.push({id:'s'+Date.now()+Math.random().toString(36).slice(2,6),date,title:title||(type==='run'?'Run':'Strength'),type,items:items?JSON.parse(JSON.stringify(items)):[]}); }
+  else { a=a.filter(s=>!(s.date===date&&s.type===type)); }
+  saveSessions(a);
+}
+function toggleSession(type,checked){
+  const prog=programState||loadProgram();if(!prog)return;
+  const day=prog.days.find(d=>d.key===todayDayKey());if(!day)return;
+  setSession(todayKey(), type==='run'?(day.run||'Run'):(day.title||'Strength'), type, checked, type==='strength'?day.items:null);
+  renderCoachToday();renderWeekRing();renderRuns();if(typeof renderTrainLog==='function')renderTrainLog();
+}
+function removeSession(id){saveSessions(loadSessions().filter(s=>s.id!==id));renderTrainLog();renderCoachToday();renderWeekRing();renderRuns();}
 function escAttr(s){return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;');}
 function todayDayKey(){return DAY_KEYS[new Date().getDay()];}
 
@@ -2278,13 +2341,25 @@ const MARVEL_CAL=[
  {wk:10,label:'8 Jun',d:{mon:{t:'A',run:'6.5km Easy Run'},tue:{t:'B'},wed:{rest:'active'},thu:{t:'C',run:'5km Half Easy/Tempo'},fri:{t:'D'},sat:{run:'10km Long Run'},sun:{rest:'full'}}},
  {wk:11,label:'15 Jun',d:{mon:{t:'E',run:'5.5km Easy Run'},tue:{t:'F'},wed:{rest:'active'},thu:{t:'A',run:'5km Taper 400s'},fri:{t:'B',run:'Recuperação Pré-Prova (easy)'},sat:{rest:'full'},sun:{race:true}}}
 ];
+// New 8-week Marvel 4× + Hyrox block — starts next Monday; loops back to W1 every 8 weeks
+const HYROX_START='2026-06-08';
+const HYROX_CAL=[
+ {wk:1,label:'8 Jun',d:{mon:{t:'A',run:'6km Easy Run'},tue:{t:'B',run:'5km 400m Repeats'},wed:{rest:'active'},thu:{t:'C'},fri:{t:'D'},sat:{run:'8km Long Run'},sun:{rest:'full'}}},
+ {wk:2,label:'15 Jun',d:{mon:{t:'E',run:'7km Easy Run'},tue:{t:'F',run:'6km On-off Ks'},wed:{rest:'active'},thu:{t:'A'},fri:{t:'B'},sat:{run:'9km Long Run'},sun:{rest:'full'}}},
+ {wk:3,label:'22 Jun',d:{mon:{t:'C',run:'7km Easy Run'},tue:{t:'D',run:"7km 1k into Broken K's"},wed:{rest:'active'},thu:{t:'E'},fri:{t:'F'},sat:{run:'12km Long Run'},sun:{rest:'full'}}},
+ {wk:4,label:'29 Jun',d:{mon:{t:'A',run:'6km Easy Run'},tue:{t:'B',run:'5km Pyramid Set'},wed:{rest:'active'},thu:{t:'C'},fri:{t:'D'},sat:{run:'10km Long Run'},sun:{rest:'full'}}},
+ {wk:5,label:'6 Jul',d:{mon:{t:'E',run:'8km Easy Run'},tue:{t:'F',run:'7.1km Rolling 300s'},wed:{rest:'active'},thu:{t:'A'},fri:{t:'B'},sat:{run:'12km Long Run'},sun:{rest:'full'}}},
+ {wk:6,label:'13 Jul',d:{mon:{t:'C',run:'8km Easy Run'},tue:{t:'D',run:'6km 500m Madness'},wed:{rest:'active'},thu:{t:'E'},fri:{t:'F'},sat:{run:'13km Long Run'},sun:{rest:'full'}}},
+ {wk:7,label:'20 Jul',d:{mon:{t:'A',run:'7km Easy Run'},tue:{t:'B',run:'7.8km Prog. Mile Repeats'},wed:{rest:'active'},thu:{t:'C'},fri:{t:'D'},sat:{run:'11km Long Run'},sun:{rest:'full'}}},
+ {wk:8,label:'27 Jul',d:{mon:{t:'E',run:'5km Easy Run'},tue:{t:'F',run:"7km Race Pace K's"},wed:{rest:'active'},thu:{t:'A'},fri:{t:'B'},sat:{rest:'full',note:'Recuperação pré-prova · véspera da 8K'},sun:{race:'8K RACE DAY (02/08)'}}}
+];
 function mondayOf(d){const x=new Date(d);x.setHours(0,0,0,0);const dow=(x.getDay()+6)%7;x.setDate(x.getDate()-dow);return x;}
 function mondayISO(d){return mondayOf(d).toISOString().slice(0,10);}
 function marvelWeekIndex(date){return Math.round((mondayOf(date)-mondayOf(new Date(MARVEL_START+'T00:00:00')))/(7*86400000));}
 function marvelDay(k,spec){
   // run = the morning Runna session (separate, ~5am); items = the 9–10am Treino (lifts only); note = rest description
-  if(spec.race)return {key:k,title:'🏁 5K RACE DAY',type:'run',run:'🏁 5K Prova — dá tudo! 🎉',items:[],note:''};
-  if(spec.rest){const active=spec.rest==='active';return {key:k,title:active?'Descanso Ativo':'Descanso',type:'rest',run:null,items:[],note:(active?'Caminhada leve / mobilidade':'Sono, comida, caminhada se quiser')+' · 2.500 kcal'};}
+  if(spec.race){const lbl=(typeof spec.race==='string')?spec.race:'5K RACE DAY';return {key:k,title:'🏁 '+lbl,type:'run',run:'🏁 '+lbl+' — dá tudo! 🎉',items:[],note:''};}
+  if(spec.rest){const active=spec.rest==='active';return {key:k,title:active?'Descanso Ativo':'Descanso',type:'rest',run:null,items:[],note:spec.note||((active?'Caminhada leve / mobilidade':'Sono, comida, caminhada se quiser')+' · 2.500 kcal')};}
   if(spec.t){const w=MARVEL_WORKOUTS[spec.t];
     // drop the gym warm-up cardio (item 0) only when there's a separate morning Runna run
     const items=spec.run?w.items.slice(1):w.items.slice();
@@ -2292,19 +2367,24 @@ function marvelDay(k,spec){
   if(spec.run)return {key:k,title:spec.run,type:'run',run:spec.run,items:[],note:''};
   return {key:k,title:'Descanso',type:'rest',run:null,items:[],note:'—'};
 }
+function weekIndexFrom(startISO,date){return Math.round((mondayOf(date)-mondayOf(new Date(startISO+'T00:00:00')))/(7*86400000));}
 function buildMarvelWeek(date){
-  const n=MARVEL_CAL.length;
-  // Loop the block: after Week 11 it wraps back to Week 1 and keeps cycling
-  const idx=((marvelWeekIndex(date)%n)+n)%n;
-  const wk=MARVEL_CAL[idx];
+  const wkMon=mondayISO(date);
+  // The current week (and earlier) finishes on the old Marvel 4× + Runna 5K plan.
+  // From HYROX_START the new 8-week Marvel + Hyrox block runs and LOOPS back to W1 every 8 weeks.
+  // Use the week-index (a difference of Mondays) for the cutover — it's timezone-safe, unlike comparing toISOString date strings.
+  const useHyrox = weekIndexFrom(HYROX_START,date) >= 0;
+  const cal = useHyrox ? HYROX_CAL : MARVEL_CAL;
+  const idx = ((weekIndexFrom(useHyrox?HYROX_START:MARVEL_START,date)%cal.length)+cal.length)%cal.length;
+  const wk=cal[idx];
   const order=['mon','tue','wed','thu','fri','sat','sun'];
   const days=order.map(k=>marvelDay(k,wk.d[k]||{rest:'full'}));
-  return {name:'Marvel 4× + Runna 5K',marvel:true,v:2,week:wk.wk,weekLabel:wk.label,weekStart:mondayISO(date),days:days};
+  return {name:useHyrox?'Marvel 4× + Hyrox':'Marvel 4× + Runna 5K',marvel:true,v:3,week:wk.wk,weekLabel:wk.label,weekStart:wkMon,blockWeeks:cal.length,days:days};
 }
 // Build the plan, roll it forward when a new week starts, or rebuild if the structure version changed
 function ensureMarvelWeek(){
   const cur=mondayISO(new Date()),p=loadProgram();
-  if(!p||!p.marvel||p.v!==2||p.weekStart!==cur){saveProgram(buildMarvelWeek(new Date()));}
+  if(!p||!p.marvel||p.v!==3||p.weekStart!==cur){saveProgram(buildMarvelWeek(new Date()));}
   else programState=p;
 }
 function generateProgram(){return buildMarvelWeek(new Date());}
@@ -2338,33 +2418,38 @@ function renderCoachToday(){
     if(cta)cta.textContent='Set up your tailored weekly plan';
     return;
   }
-  if(cta){const sc=sessionCounts(prog);cta.textContent=`${prog.name} · ${sc.lifts} strength sessions/wk`;const rc=$('ctaRunsSummary');if(rc)rc.textContent=`${sc.runs} runs this week · 5K race 21 Jun`;}
+  if(cta){const sc=sessionCounts(prog);cta.textContent=`${prog.name} · ${sc.lifts} strength sessions/wk`;const rc=$('ctaRunsSummary');if(rc)rc.textContent=`${sc.runs} runs this week`;}
   const dk=todayDayKey();
   const day=prog.days.find(d=>d.key===dk)||prog.days[0];
   const meta=TYPE_META[day.type]||TYPE_META.strength;
   $('coachTodayTitle').textContent=`Today — ${DAY_NAMES[dk]}`;
   const dlog=loadProgramLog()[todayKey()]||{checks:{}};
   let html='';
+  // ---- Readiness adjusts today's session (turns the score into an action) ----
+  const _te=loadEntries().find(e=>e.date===todayKey());
+  if(_te){
+    const s=_te.score; let t,d,c='';
+    if(day.type==='rest'){t='🟢 Recovery day';d='Readiness '+s+' — rest is the plan. Keep it light and fuel well.';}
+    else if(s>=80){t='🟢 Push';d='Readiness '+s+' — green light. Hit your top sets and the full run.';}
+    else if(s>=62){t='🟡 Steady';d='Readiness '+s+' — quality over max: back off ~10% on top sets, keep the run easy. No PRs today.';}
+    else if(s>=42){t='🟠 Ease back';c='warn';d='Readiness '+s+' — movement, not stress: 2–3 working sets, swap the run for a brisk walk.';}
+    else{t='🔴 Recover';c='warn';d='Readiness '+s+' — skip the structured session today. Mobility, food, water, sleep.';}
+    html+=`<div class="callout ${c}" style="margin:2px 0 14px"><b>${t}</b> · ${d}</div>`;
+  }else{
+    html+=`<div class="callout info" style="margin:2px 0 14px">📝 <b>Do your morning check-in</b> — your readiness will tailor today's intensity.</div>`;
+  }
   if(day.type==='rest'){
     html+=`<div class="sess"><div class="sess-head"><span class="sess-ic">${meta.icon}</span><div><div class="sess-when">Rest</div><div class="sess-title">${day.title}</div></div></div><p class="sess-note">Recovery is training. ${day.note||''}</p></div>`;
   }else{
-    // Morning Runna run (~5am) — its own block
+    // Morning Runna run (~5am) — ONE overall tick
     if(day.run){
-      const rdone=!!dlog.runDone;
-      html+=`<div class="sess"><div class="sess-head"><span class="sess-ic">🏃</span><div><div class="sess-when">Morning run</div><div class="sess-title">${day.run}</div></div></div><label class="ex-row run-row${rdone?' done':''}"><input type="checkbox" ${rdone?'checked':''} onchange="toggleRun(this.checked)"><span class="dim">Mark run as done</span></label></div>`;
+      const rdone=hasSession(todayKey(),'run');
+      html+=`<div class="sess"><div class="sess-head"><span class="sess-ic">🏃</span><div><div class="sess-when">Morning run</div><div class="sess-title">${day.run}</div></div></div><label class="ex-row run-row${rdone?' done':''}"><input type="checkbox" ${rdone?'checked':''} onchange="toggleSession('run',this.checked)"><span><b>Mark run done</b></span></label></div>`;
     }
-    // Treino strength session (9–10am) — separate block
+    // Treino strength (9–10am) — short summary + ONE overall tick (full exercises live in the program)
     if(day.items.length){
-      html+=`<div class="sess"><div class="sess-head"><span class="sess-ic">🏋️</span><div><div class="sess-when">9–10am · Strength</div><div class="sess-title">${day.title}</div></div></div><div class="ex-list">`;
-      day.items.forEach((it,idx)=>{
-        const done=dlog.checks&&dlog.checks[idx];
-        const restLine=(it.rest&&it.rest!=='—')?`<br><span class="rest-tag">⏱ rest ${it.rest}</span>`:'';
-        html+=`<label class="ex-row${done?' done':''}"><input type="checkbox" ${done?'checked':''} onchange="toggleExercise(${idx},this.checked)"><span><b>${it.ex}</b><br><span class="dim">${it.detail}</span>${restLine}</span></label>`;
-      });
-      html+='</div>';
-      const total=day.items.length;
-      const doneCount=Object.values(dlog.checks||{}).filter(Boolean).length;
-      html+=`<p class="hint" style="margin-top:14px">${doneCount}/${total} done${(total>0&&doneCount===total)?' — session complete! 💪':''}</p>`;
+      const ldone=hasSession(todayKey(),'strength');
+      html+=`<div class="sess"><div class="sess-head"><span class="sess-ic">🏋️</span><div><div class="sess-when">9–10am · Strength</div><div class="sess-title">${day.title}</div></div></div><label class="ex-row run-row${ldone?' done':''}"><input type="checkbox" ${ldone?'checked':''} onchange="toggleSession('strength',this.checked)"><span><b>Mark ${day.title.split('·')[0].trim()} done</b></span></label><div style="text-align:right;margin-top:4px"><span onclick="showTab('program')" style="font-size:12px;color:var(--accent);font-weight:700;cursor:pointer">View exercises →</span></div></div>`;
     }
   }
   if(dlog.strava){
@@ -2395,19 +2480,13 @@ function toggleRun(checked){
 function sessionCounts(prog){let lifts=0,runs=0;(prog.days||[]).forEach(d=>{if(d.items&&d.items.length)lifts++;if(d.run)runs++;});return {lifts,runs,total:lifts+runs};}
 function weekStats(){
   const prog=programState||loadProgram();if(!prog)return null;
-  const log=loadProgramLog();
-  const now=new Date();const dow=(now.getDay()+6)%7; // 0=Mon
-  const monday=new Date(now);monday.setDate(now.getDate()-dow);
+  const dates=thisWeekDates();
   let planned=0,completed=0;
-  for(let i=0;i<7;i++){
-    const dt=new Date(monday);dt.setDate(monday.getDate()+i);
-    const key=dt.toISOString().slice(0,10);
-    const pd=prog.days.find(x=>x.key===DAY_KEYS[dt.getDay()]);
-    if(!pd)continue;
-    const l=log[key]||{};
-    if(pd.items&&pd.items.length){planned++;const done=Object.values(l.checks||{}).filter(Boolean).length;if(done>=pd.items.length)completed++;}
-    if(pd.run){planned++;if(l.runDone)completed++;}
-  }
+  ['mon','tue','wed','thu','fri','sat','sun'].forEach(k=>{
+    const pd=prog.days.find(x=>x.key===k);if(!pd)return;const date=dates[k];
+    if(pd.items&&pd.items.length){planned++;if(hasSession(date,'strength'))completed++;}
+    if(pd.run){planned++;if(hasSession(date,'run'))completed++;}
+  });
   return {planned,completed};
 }
 function renderWeekRing(){
@@ -2430,7 +2509,7 @@ function renderProgram(){
     return;
   }
   programState=prog;
-  if($('programTitle'))$('programTitle').textContent=prog.name+(prog.week?' · Semana '+prog.week+'/11':'');
+  if($('programTitle'))$('programTitle').textContent=prog.name+(prog.week?' · Semana '+prog.week+'/'+(prog.blockWeeks||11):'');
   const todayK=todayDayKey();
   let html='';
   prog.days.forEach((day,d)=>{
@@ -2462,15 +2541,15 @@ function thisWeekDates(){ // {mon:'YYYY-MM-DD', ...} for the current week
 function renderRuns(){
   const el=$('runsList');if(!el)return;
   const prog=programState||loadProgram();
-  if($('runsTitle'))$('runsTitle').textContent='My runs'+(prog&&prog.week?' · Semana '+prog.week+'/11':'');
+  if($('runsTitle'))$('runsTitle').textContent='My runs'+(prog&&prog.week?' · Semana '+prog.week+'/'+(prog.blockWeeks||11):'');
   if(!prog){el.innerHTML='<div class="card"><p class="empty">No plan yet.</p></div>';return;}
   const order=['mon','tue','wed','thu','fri','sat','sun'];
   const runDays=order.map(k=>prog.days.find(d=>d.key===k)).filter(d=>d&&d.run);
   if(!runDays.length){el.innerHTML='<div class="card"><p class="empty">No runs scheduled this week.</p></div>';return;}
-  const dates=thisWeekDates(),log=loadProgramLog(),todayK=todayDayKey();
+  const dates=thisWeekDates(),todayK=todayDayKey();
   let html='';
   runDays.forEach(day=>{
-    const date=dates[day.key],done=!!(log[date]&&log[date].runDone),isToday=day.key===todayK;
+    const date=dates[day.key],done=hasSession(date,'run'),isToday=day.key===todayK;
     html+=`<div class="card cta-card day-card${isToday?' today':''}" onclick="toggleRunFor('${day.key}')">
       <div class="cta-inner">
         <div class="day-head"><span class="day-ic">🏃</span>
@@ -2483,12 +2562,70 @@ function renderRuns(){
   el.innerHTML=html;
 }
 function toggleRunFor(dayKey){
-  const date=thisWeekDates()[dayKey];if(!date)return;
-  const log=loadProgramLog();
-  if(!log[date])log[date]={checks:{}};
-  log[date].runDone=!log[date].runDone;
-  saveProgramLog(log);
-  renderRuns();renderCoachToday();renderWeekRing();
+  const prog=programState||loadProgram();if(!prog)return;
+  const day=prog.days.find(d=>d.key===dayKey),date=thisWeekDates()[dayKey];if(!date||!day)return;
+  setSession(date, day.run||'Run', 'run', !hasSession(date,'run'));
+  renderRuns();renderCoachToday();renderWeekRing();if(typeof renderTrainLog==='function')renderTrainLog();
+}
+// ---- Save a whole session from the program day page → training log ----
+function logDaySession(){
+  const prog=programState||loadProgram();if(!prog)return;
+  const day=prog.days[currentEditDay];if(!day)return;
+  const date=thisWeekDates()[day.key]||todayKey();
+  const what=[];
+  if(day.items&&day.items.length){setSession(date,day.title,'strength',true,day.items);what.push(day.title.split('·')[0].trim());}
+  if(day.run){setSession(date,day.run,'run',true,null);what.push(day.run);}
+  if(!what.length){toast('Nothing to log on a rest day.');return;}
+  renderCoachToday();renderWeekRing();renderRuns();renderTrainLog();
+  toast('✓ Logged: '+what.join(' + ')+' · '+new Date(date+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'}));
+}
+let _editSess=null,_editDraft=null;
+function editSession(id){const s=loadSessions().find(x=>x.id===id);if(!s)return;_editSess=id;_editDraft=JSON.parse(JSON.stringify(s));if(!_editDraft.items)_editDraft.items=[];renderTrainLog();window.scrollTo(0,0);}
+function closeSessEdit(){_editSess=null;_editDraft=null;renderTrainLog();}
+function sessExAdd(){if(!_editDraft)return;_editDraft.items.push({ex:'',detail:'',rest:''});renderTrainLog();}
+function sessExRemove(i){if(!_editDraft)return;_editDraft.items.splice(i,1);renderTrainLog();}
+function saveSessEdit(){if(!_editDraft)return;const a=loadSessions();const idx=a.findIndex(x=>x.id===_editDraft.id);if(idx<0)return;a[idx]=_editDraft;saveSessions(a);_editSess=null;_editDraft=null;renderTrainLog();renderCoachToday();renderWeekRing();renderRuns();toast('✓ Session updated');}
+function deleteSessEdit(){const id=_editDraft&&_editDraft.id;_editSess=null;_editDraft=null;if(id)removeSession(id);else renderTrainLog();}
+function _tlEditorHtml(d){
+  const isS=d.type!=='run';
+  let ex='';
+  if(isS){
+    (d.items||[]).forEach((it,i)=>{
+      ex+=`<div class="ex-block">
+        <div class="ex-block-top"><input type="text" value="${escAttr(it.ex)}" placeholder="Exercise" oninput="_editDraft.items[${i}].ex=this.value" /><button class="x-btn" onclick="sessExRemove(${i})" title="Remove">×</button></div>
+        <div class="ex-block-bot">
+          <div class="fld"><small>Sets × reps / load</small><input type="text" value="${escAttr(it.detail||'')}" placeholder="4×10 @ 90kg" oninput="_editDraft.items[${i}].detail=this.value" /></div>
+          <div class="fld"><small>Rest</small><input type="text" value="${escAttr(it.rest||'')}" placeholder="90s" oninput="_editDraft.items[${i}].rest=this.value" /></div>
+        </div>
+      </div>`;
+    });
+    ex+=`<button class="ghost add-ex" onclick="sessExAdd()">+ Add exercise</button>`;
+  }
+  return `<div class="card">
+    <button class="ghost" style="margin:0 0 14px" onclick="closeSessEdit()">← Back to log</button>
+    <label><b>Session name</b></label>
+    <input type="text" value="${escAttr(d.title)}" oninput="_editDraft.title=this.value" />
+    <div class="row" style="margin-top:2px">
+      <div><label><b>Date</b></label><input type="date" value="${d.date}" onchange="_editDraft.date=this.value" /></div>
+      <div><label><b>Type</b></label><div class="toggle"><div class="chip${isS?' on':''}" onclick="_editDraft.type='strength';renderTrainLog()">🏋️</div><div class="chip${!isS?' on':''}" onclick="_editDraft.type='run';renderTrainLog()">🏃</div></div></div>
+    </div>
+    ${isS?`<h3 style="margin:18px 0 8px;font-size:14px">Exercises — edit your actual sets/reps/load</h3>${ex}`:'<p class="hint" style="margin:14px 0 0">Run session — no exercises to edit.</p>'}
+    <button class="primary" style="width:100%;margin-top:18px" onclick="saveSessEdit()">Save session</button>
+    <button class="ghost" style="width:100%;margin-top:8px;color:var(--red)" onclick="deleteSessEdit()">🗑 Delete session</button>
+  </div>`;
+}
+function renderTrainLog(){
+  const el=$('trainLogList');if(!el)return;
+  if(_editSess&&_editDraft){el.innerHTML=_tlEditorHtml(_editDraft);return;}
+  const all=loadSessions().slice().sort((a,b)=>a.date<b.date?1:-1);
+  if(!all.length){el.innerHTML='<div class="card"><p class="empty">No sessions logged yet. Tick a session on Today, or Save one from your program.</p></div>';return;}
+  let html='<div class="card"><h2 style="margin-bottom:6px">Logged sessions</h2>';
+  all.forEach(s=>{
+    const when=new Date(s.date+'T12:00:00').toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+    const sub=(s.type==='strength'&&s.items&&s.items.length)?(s.items.length+' exercises'):(s.type==='run'?'Run':'Session');
+    html+=`<div class="li" onclick="editSession('${s.id}')" style="cursor:pointer"><span class="e">${s.type==='run'?'🏃':'🏋️'}</span><div style="flex:1"><b>${s.title}</b><br><span>${when} · ${sub}</span></div><span style="font-size:15px;color:var(--dim)">✎</span></div>`;
+  });
+  html+='</div>';el.innerHTML=html;
 }
 // ---- Day detail / editor (one day per page) ----
 function openDay(d){currentEditDay=d;renderDayDetail();showTab('day');}
@@ -2824,7 +2961,7 @@ function applyStravaToProgram(runs){
 
 // ===== SWIPE NAVIGATION (touch only — desktop keeps the buttons) =====
 const SWIPE_MAIN=['today','coach','fuel','labs','progress','body'];
-const SWIPE_PARENT={workouts:'coach',program:'coach',runs:'coach',day:'program',weight:'progress',supply:'progress',photos:'progress',carb:'fuel',supps:'fuel',sleep:'body',hormones:'body',trends:'body',metrics:'body',labentry:'labs',labhistory:'labs',checkin:'today'};
+const SWIPE_PARENT={workouts:'coach',program:'coach',runs:'coach',day:'program',weight:'progress',supply:'progress',photos:'progress',carb:'fuel',supps:'fuel',sleep:'body',hormones:'body',trends:'body',metrics:'body',labentry:'labs',labhistory:'labs',checkin:'today',trainlog:'coach'};
 function _curTab(){const on=document.querySelector('.tab.on');return on?on.id.replace('tab-',''):'today';}
 function _navBtn(name){return document.querySelector('nav button[data-tab="'+name+'"]');}
 function swipeNav(dir){ // swipe ONLY goes back from a drilled-in sub-page to its parent — never between main tabs
@@ -2848,6 +2985,8 @@ function swipeNav(dir){ // swipe ONLY goes back from a drilled-in sub-page to it
 // ===== INIT =====
 (function init(){
   initTheme();
+  requestPersist();      // mark this data durable so the browser won't auto-clear it
+  backupReminder();      // nudge to download a backup if it's been >14 days
   const d=new Date();
   $('dateline').textContent=d.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'});
   loadProfile();
@@ -2861,6 +3000,7 @@ function swipeNav(dir){ // swipe ONLY goes back from a drilled-in sub-page to it
   renderProgram();
   renderRuns();
   renderWeekRing();
+  renderTrainLog();
   renderHome();
   renderSupps();
   renderMetrics();
