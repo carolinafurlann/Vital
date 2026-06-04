@@ -328,6 +328,19 @@
   .tl-time{flex-shrink:0;width:62px;font-weight:700;font-size:12.5px;color:var(--accent)}
   .tl-body b{font-size:13.5px} .tl-body .g{color:var(--accent);font-weight:700}
   .tl-body span{display:block;color:var(--dim);font-size:12px;margin-top:2px}
+  /* inline editors (supplements + carb timing) */
+  .edit-grp{font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--accent);margin:16px 0 6px}
+  .edit-grp:first-child{margin-top:4px}
+  .edit-row{display:flex;gap:8px;align-items:center;margin:8px 0}
+  .edit-row input{margin:0;padding:9px 10px;font-size:13.5px}
+  .edit-x{flex:0 0 36px;width:36px;height:38px;border:1px solid var(--line);background:transparent;color:var(--red);border-radius:9px;font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .add-row{width:100%;margin:2px 0 6px;font-size:13px}
+  .carb-edit-item{border-top:1px solid var(--line);padding:12px 0}
+  .carb-edit-item:first-of-type{border-top:none;padding-top:4px}
+  .carb-edit-top{display:flex;gap:8px;align-items:center}
+  .carb-edit-top input.t{flex:0 0 84px;width:84px;margin:0;padding:9px 8px;font-size:13px}
+  .carb-edit-top input.l{flex:1;margin:0;padding:9px 10px;font-size:13.5px;font-weight:600}
+  .carb-edit-item textarea{width:100%;margin:8px 0 0;padding:9px 10px;font-size:13px;font-family:inherit;min-height:52px;resize:vertical}
   .pr-name{font-weight:600;color:var(--text)}
   .pr-weight{font-size:18px;font-weight:800;color:var(--accent)}
   nav{position:fixed;bottom:calc(12px + env(safe-area-inset-bottom,0px));left:12px;right:12px;max-width:536px;margin:0 auto;
@@ -841,8 +854,8 @@
 
     <div class="card">
       <h2>💧 Hydration plan</h2>
-      <div class="li"><span class="e">🚰</span><div><b>4 L per day</b><br><span>Front-loaded — most of it before mid-afternoon.</span></div></div>
-      <div class="li"><span class="e">⚡</span><div><b>High5 electrolytes + a pinch of salt</b><br><span>Especially around training and in the heat.</span></div></div>
+      <div class="li"><div><b>4 L per day</b><br><span>Front-loaded — most of it before mid-afternoon.</span></div></div>
+      <div class="li"><div><b>High5 electrolytes + a pinch of salt</b><br><span>Especially around training and in the heat.</span></div></div>
     </div>
 
     <div class="card cta-card" onclick="showTab('supps')">
@@ -1188,7 +1201,7 @@ function backupReminder(){
   if(days>14)setTimeout(()=>toast('💾 Time to back up — Profile → Backup → Download. Keep a copy in iCloud/email so a lost phone never loses your data.'),2600);
 }
 // ===== BACKUP / RESTORE =====
-const VITAL_KEYS=['vital_profile_v2','vital_entries_v2','vital_progress_v2','vital_labs_v1','vital_program_v1','vital_program_log_v1','vital_sessions_v1','vital_health_v1','vital_theme'];
+const VITAL_KEYS=['vital_profile_v2','vital_entries_v2','vital_progress_v2','vital_labs_v1','vital_program_v1','vital_program_log_v1','vital_sessions_v1','vital_health_v1','vital_carb_v1','vital_supps_v1','vital_theme'];
 const BACKUP_STAMP_KEY='vital_last_backup';
 function exportData(){
   const bundle={__vital_backup__:true,version:1,exportedAt:new Date().toISOString(),data:{}};
@@ -1938,9 +1951,9 @@ function calculateNutrition(){
 // ===== CARB TIMING =====
 let currentDayType='train';
 // % of daily carbs per slot. Training day anchored to 5am run + 9am lift.
-const CARB_PLAN={
+const CARB_KEY='vital_carb_v1';
+const CARB_DEFAULT={
   train:{
-    fixed:true,
     slots:[
       {time:'4:00a',label:'Pre-run',food:'Orange juice 100ml · honey 15ml · whey protein 20g'},
       {time:'5:30a',label:'Post-run (immediate)',food:'Whey 30g + cocoa 5g · 0% Greek yogurt 50g · raspberries 100g · honey 15ml'},
@@ -1953,7 +1966,6 @@ const CARB_PLAN={
     ]
   },
   rest:{
-    fixed:true,
     slots:[
       {time:'5:30a',label:'Morning shake',food:'Orange juice 100ml · cocoa 5g · whey protein 30g · 0% Greek yogurt 50g · honey 15ml'},
       {time:'6:30a',label:'Breakfast',food:'4 whole eggs · sourdough 50g · salted butter 10g · Nespresso + whole milk 50ml'},
@@ -1965,22 +1977,54 @@ const CARB_PLAN={
     ]
   }
 };
+function loadCarbPlan(){ try{const s=localStorage.getItem(CARB_KEY);if(s){const p=JSON.parse(s);if(p&&p.train&&p.rest&&Array.isArray(p.train.slots)&&Array.isArray(p.rest.slots))return p;}}catch(e){} return JSON.parse(JSON.stringify(CARB_DEFAULT)); }
+function saveCarbData(p){ localStorage.setItem(CARB_KEY,JSON.stringify(p)); }
+let _carbEdit=false,_carbDraft=null;
 function renderCarbPlan(type){
   const tl=$('carbTimeline'); if(!tl) return;
-  const plan=CARB_PLAN[type];
-  if(!plan.fixed && !nutri){ tl.innerHTML='<div class="empty">Complete your profile to see your carb plan.</div>'; if($('carbStrategy'))$('carbStrategy').style.display='none'; return; }
+  if(_carbEdit){ tl.innerHTML=_carbEditHtml(type); if($('carbStrategy'))$('carbStrategy').style.display='none'; return; }
+  const plan=loadCarbPlan()[type];
   if($('carbStrategy'))$('carbStrategy').style.display='block';
-  const totalG=plan.fixed?0:nutri[plan.total];
   let html='';
   plan.slots.forEach(s=>{
-    const head=plan.fixed?`<b>${s.label}</b>`:`<b>${s.label} — <span class="g">${Math.round(totalG*s.pct)}g carbs</span></b>`;
-    html+=`<div class="tl-item"><div class="tl-time">${s.time}</div><div class="tl-body">${head}<span>${s.food}</span></div></div>`;
+    html+=`<div class="tl-item"><div class="tl-time">${escHtml(s.time)}</div><div class="tl-body"><b>${escHtml(s.label)}</b><span>${escHtml(s.food)}</span></div></div>`;
   });
+  html+=`<button class="ghost" style="width:100%;margin-top:14px" onclick="editCarb()">✏️ Edit ${type==='train'?'training':'rest'}-day plan</button>`;
   tl.innerHTML=html;
   if($('carbStrategy'))$('carbStrategy').innerHTML = type==='train'
     ? `<b>Training day (~2,900 kcal):</b> your real plan, front-loaded around your 5am run + 9am lift, finishing with dinner at 3pm and just milk + tea before bed.`
     : `<b>Rest day (~2,500 kcal):</b> your real plan. Carbs come down vs training days — nuts instead of bananas/dates, broccoli + avocado instead of sweet potato, and half the rice at lunch (~400 kcal less). Protein &amp; fat stay high.`;
 }
+function _carbEditHtml(type){
+  const slots=(_carbDraft[type]&&_carbDraft[type].slots)||[];
+  let html=`<p class="hint" style="margin:0 0 8px">Editing your <b>${type==='train'?'training':'rest'}-day</b> plan. Flip the toggle above to edit the other day — your changes are kept.</p>`;
+  slots.forEach((s,i)=>{
+    html+=`<div class="carb-edit-item">
+      <div class="carb-edit-top">
+        <input class="t" type="text" id="carb_${i}_t" value="${escAttr(s.time)}" placeholder="Time" />
+        <input class="l" type="text" id="carb_${i}_l" value="${escAttr(s.label)}" placeholder="Meal / label" />
+        <button class="edit-x" onclick="carbSlotDel(${i})" aria-label="Delete">×</button>
+      </div>
+      <textarea id="carb_${i}_f" placeholder="Food & amounts">${escHtml(s.food)}</textarea>
+    </div>`;
+  });
+  html+=`<button class="ghost add-row" onclick="carbSlotAdd()">+ Add a meal / slot</button>`;
+  html+=`<button class="primary" style="width:100%;margin-top:14px" onclick="saveCarb()">Save ${type==='train'?'training':'rest'}-day plan</button>`;
+  html+=`<button class="ghost" style="width:100%;margin-top:8px" onclick="cancelCarb()">Cancel</button>`;
+  return html;
+}
+function _carbCapture(){
+  if(!_carbDraft||!_carbDraft[currentDayType])return;
+  (_carbDraft[currentDayType].slots||[]).forEach((s,i)=>{
+    const t=$(`carb_${i}_t`),l=$(`carb_${i}_l`),f=$(`carb_${i}_f`);
+    if(t)s.time=t.value.trim(); if(l)s.label=l.value.trim(); if(f)s.food=f.value.trim();
+  });
+}
+function editCarb(){ _carbEdit=true; _carbDraft=loadCarbPlan(); renderCarbPlan(currentDayType); }
+function carbSlotAdd(){ _carbCapture(); _carbDraft[currentDayType].slots=_carbDraft[currentDayType].slots||[]; _carbDraft[currentDayType].slots.push({time:'',label:'',food:''}); renderCarbPlan(currentDayType); }
+function carbSlotDel(i){ _carbCapture(); _carbDraft[currentDayType].slots.splice(i,1); renderCarbPlan(currentDayType); }
+function saveCarb(){ if(!_carbDraft){_carbEdit=false;renderCarbPlan(currentDayType);return;} _carbCapture(); ['train','rest'].forEach(t=>{ if(_carbDraft[t])_carbDraft[t].slots=(_carbDraft[t].slots||[]).filter(s=>s.time||s.label||s.food); }); saveCarbData(_carbDraft); _carbEdit=false; _carbDraft=null; renderCarbPlan(currentDayType); if(typeof toast==='function')toast('Carb plan saved ✓'); }
+function cancelCarb(){ _carbEdit=false; _carbDraft=null; renderCarbPlan(currentDayType); }
 
 function resetForm(){
   Object.keys(sliders).forEach(id=>{$(id).value=3;});
@@ -2274,6 +2318,7 @@ function toggleSession(type,checked){
 }
 function removeSession(id){saveSessions(loadSessions().filter(s=>s.id!==id));renderTrainLog();renderCoachToday();renderWeekRing();renderRuns();}
 function escAttr(s){return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;');}
+function escHtml(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function todayDayKey(){return DAY_KEYS[new Date().getDay()];}
 
 let currentEditDay=0;
@@ -2332,29 +2377,29 @@ const MARVEL_WORKOUTS={
    {ex:'Abdominal Total no Banco',detail:'4×40',rest:'1 min'}]}
 };
 const MARVEL_CAL=[
- {wk:1,label:'6 Abr',d:{mon:{t:'A',run:'5.5km Easy Run'},tue:{t:'B',run:'6.4km Intervals (400m)'},wed:{rest:'active'},thu:{t:'C',run:'7.5km Tempo (2-1-1)'},fri:{t:'D'},sat:{run:'10km Long Run'},sun:{rest:'full'}}},
- {wk:2,label:'13 Abr',d:{mon:{t:'E',run:'6km Easy Run'},tue:{t:'F',run:'5.5km Intervals (Drop Set)'},wed:{rest:'active'},thu:{t:'A',run:'8.9km Tempo (300s)'},fri:{t:'B'},sat:{run:'9km Easy Run'},sun:{rest:'full'}}},
- {wk:3,label:'20 Abr',d:{mon:{t:'C'},tue:{t:'D',run:'5km Broken Miles'},wed:{rest:'active'},thu:{t:'E',run:'10km Prog. Long Run'},fri:{t:'F'},sat:{run:'11km Prog. Repeat'},sun:{rest:'full'}}},
- {wk:4,label:'27 Abr',d:{mon:{t:'A',run:'6.5km Prog. Run'},tue:{t:'B',run:'9km Easy Run'},wed:{rest:'active'},thu:{t:'C'},fri:{t:'D'},sat:{run:'12km Block Long Run'},sun:{rest:'full'}}},
- {wk:5,label:'4 Mai',d:{mon:{t:'E'},tue:{t:'F',run:'5km Pyramid Intervals'},wed:{rest:'active'},thu:{t:'A',run:'5km Easy Run'},fri:{t:'B'},sat:{run:'7.5km Long Run'},sun:{rest:'full'}}},
- {wk:6,label:'11 Mai',d:{mon:{t:'C'},tue:{t:'D',run:'5km Rolling 400s'},wed:{rest:'active'},thu:{t:'E'},fri:{t:'F'},sat:{run:'13km Long Run'},sun:{rest:'full'}}},
- {wk:7,label:'18 Mai',d:{mon:{t:'A'},tue:{t:'B',run:"5km 1k into Broken K's"},wed:{rest:'active'},thu:{t:'C',run:'5km Easy Run'},fri:{t:'D'},sat:{run:'13km Prog. Long Run'},sun:{rest:'full'}}},
- {wk:8,label:'25 Mai',d:{mon:{t:'E',run:'6.5km Easy Run'},tue:{t:'F',run:'5km Pyramid Set'},wed:{rest:'active'},thu:{t:'A'},fri:{t:'B'},sat:{run:'14km Hotspot Long'},sun:{rest:'full'}}},
- {wk:9,label:'1 Jun',d:{mon:{t:'C'},tue:{t:'D',run:'5km Pyramid Set'},wed:{rest:'active'},thu:{t:'E',run:'6.5km Easy Run'},fri:{t:'F'},sat:{run:'16km Long Run'},sun:{rest:'full'}}},
- {wk:10,label:'8 Jun',d:{mon:{t:'A',run:'6.5km Easy Run'},tue:{t:'B'},wed:{rest:'active'},thu:{t:'C',run:'5km Half Easy/Tempo'},fri:{t:'D'},sat:{run:'10km Long Run'},sun:{rest:'full'}}},
- {wk:11,label:'15 Jun',d:{mon:{t:'E',run:'5.5km Easy Run'},tue:{t:'F'},wed:{rest:'active'},thu:{t:'A',run:'5km Taper 400s'},fri:{t:'B',run:'Recuperação Pré-Prova (easy)'},sat:{rest:'full'},sun:{race:true}}}
+ {wk:1,label:'6 Abr',d:{mon:{t:'B',run:'5.5km Easy Run'},tue:{t:'C',run:'6.4km Intervals (400m)'},wed:{rest:'active'},thu:{t:'D',run:'7.5km Tempo (2-1-1)'},fri:{t:'E'},sat:{run:'10km Long Run'},sun:{rest:'full'}}},
+ {wk:2,label:'13 Abr',d:{mon:{t:'F',run:'6km Easy Run'},tue:{t:'A',run:'5.5km Intervals (Drop Set)'},wed:{rest:'active'},thu:{t:'B',run:'8.9km Tempo (300s)'},fri:{t:'C'},sat:{run:'9km Easy Run'},sun:{rest:'full'}}},
+ {wk:3,label:'20 Abr',d:{mon:{t:'D'},tue:{t:'E',run:'5km Broken Miles'},wed:{rest:'active'},thu:{t:'F',run:'10km Prog. Long Run'},fri:{t:'A'},sat:{run:'11km Prog. Repeat'},sun:{rest:'full'}}},
+ {wk:4,label:'27 Abr',d:{mon:{t:'B',run:'6.5km Prog. Run'},tue:{t:'C',run:'9km Easy Run'},wed:{rest:'active'},thu:{t:'D'},fri:{t:'E'},sat:{run:'12km Block Long Run'},sun:{rest:'full'}}},
+ {wk:5,label:'4 Mai',d:{mon:{t:'F'},tue:{t:'A',run:'5km Pyramid Intervals'},wed:{rest:'active'},thu:{t:'B',run:'5km Easy Run'},fri:{t:'C'},sat:{run:'7.5km Long Run'},sun:{rest:'full'}}},
+ {wk:6,label:'11 Mai',d:{mon:{t:'D'},tue:{t:'E',run:'5km Rolling 400s'},wed:{rest:'active'},thu:{t:'F'},fri:{t:'A'},sat:{run:'13km Long Run'},sun:{rest:'full'}}},
+ {wk:7,label:'18 Mai',d:{mon:{t:'B'},tue:{t:'C',run:"5km 1k into Broken K's"},wed:{rest:'active'},thu:{t:'D',run:'5km Easy Run'},fri:{t:'E'},sat:{run:'13km Prog. Long Run'},sun:{rest:'full'}}},
+ {wk:8,label:'25 Mai',d:{mon:{t:'F',run:'6.5km Easy Run'},tue:{t:'A',run:'5km Pyramid Set'},wed:{rest:'active'},thu:{t:'B'},fri:{t:'C'},sat:{run:'14km Hotspot Long'},sun:{rest:'full'}}},
+ {wk:9,label:'1 Jun',d:{mon:{t:'D'},tue:{t:'E',run:'5km Pyramid Set'},wed:{rest:'active'},thu:{t:'F',run:'6.5km Easy Run'},fri:{t:'A'},sat:{run:'16km Long Run'},sun:{rest:'full'}}},
+ {wk:10,label:'8 Jun',d:{mon:{t:'B',run:'6.5km Easy Run'},tue:{t:'C'},wed:{rest:'active'},thu:{t:'D',run:'5km Half Easy/Tempo'},fri:{t:'E'},sat:{run:'10km Long Run'},sun:{rest:'full'}}},
+ {wk:11,label:'15 Jun',d:{mon:{t:'F',run:'5.5km Easy Run'},tue:{t:'A'},wed:{rest:'active'},thu:{t:'B',run:'5km Taper 400s'},fri:{t:'C',run:'Recuperação Pré-Prova (easy)'},sat:{rest:'full'},sun:{race:true}}}
 ];
 // New 8-week Marvel 4× + Hyrox block — starts next Monday; loops back to W1 every 8 weeks
 const HYROX_START='2026-06-08';
 const HYROX_CAL=[
- {wk:1,label:'8 Jun',d:{mon:{t:'A',run:'6km Easy Run'},tue:{t:'B',run:'5km 400m Repeats'},wed:{rest:'active'},thu:{t:'C'},fri:{t:'D'},sat:{run:'8km Long Run'},sun:{rest:'full'}}},
- {wk:2,label:'15 Jun',d:{mon:{t:'E',run:'7km Easy Run'},tue:{t:'F',run:'6km On-off Ks'},wed:{rest:'active'},thu:{t:'A'},fri:{t:'B'},sat:{run:'9km Long Run'},sun:{rest:'full'}}},
- {wk:3,label:'22 Jun',d:{mon:{t:'C',run:'7km Easy Run'},tue:{t:'D',run:"7km 1k into Broken K's"},wed:{rest:'active'},thu:{t:'E'},fri:{t:'F'},sat:{run:'12km Long Run'},sun:{rest:'full'}}},
- {wk:4,label:'29 Jun',d:{mon:{t:'A',run:'6km Easy Run'},tue:{t:'B',run:'5km Pyramid Set'},wed:{rest:'active'},thu:{t:'C'},fri:{t:'D'},sat:{run:'10km Long Run'},sun:{rest:'full'}}},
- {wk:5,label:'6 Jul',d:{mon:{t:'E',run:'8km Easy Run'},tue:{t:'F',run:'7.1km Rolling 300s'},wed:{rest:'active'},thu:{t:'A'},fri:{t:'B'},sat:{run:'12km Long Run'},sun:{rest:'full'}}},
- {wk:6,label:'13 Jul',d:{mon:{t:'C',run:'8km Easy Run'},tue:{t:'D',run:'6km 500m Madness'},wed:{rest:'active'},thu:{t:'E'},fri:{t:'F'},sat:{run:'13km Long Run'},sun:{rest:'full'}}},
- {wk:7,label:'20 Jul',d:{mon:{t:'A',run:'7km Easy Run'},tue:{t:'B',run:'7.8km Prog. Mile Repeats'},wed:{rest:'active'},thu:{t:'C'},fri:{t:'D'},sat:{run:'11km Long Run'},sun:{rest:'full'}}},
- {wk:8,label:'27 Jul',d:{mon:{t:'E',run:'5km Easy Run'},tue:{t:'F',run:"7km Race Pace K's"},wed:{rest:'active'},thu:{t:'A'},fri:{t:'B'},sat:{rest:'full',note:'Recuperação pré-prova · véspera da 8K'},sun:{race:'8K RACE DAY (02/08)'}}}
+ {wk:1,label:'8 Jun',d:{mon:{t:'B',run:'6km Easy Run'},tue:{t:'C',run:'5km 400m Repeats'},wed:{rest:'active'},thu:{t:'D'},fri:{t:'E'},sat:{run:'8km Long Run'},sun:{rest:'full'}}},
+ {wk:2,label:'15 Jun',d:{mon:{t:'F',run:'7km Easy Run'},tue:{t:'A',run:'6km On-off Ks'},wed:{rest:'active'},thu:{t:'B'},fri:{t:'C'},sat:{run:'9km Long Run'},sun:{rest:'full'}}},
+ {wk:3,label:'22 Jun',d:{mon:{t:'D',run:'7km Easy Run'},tue:{t:'E',run:"7km 1k into Broken K's"},wed:{rest:'active'},thu:{t:'F'},fri:{t:'A'},sat:{run:'12km Long Run'},sun:{rest:'full'}}},
+ {wk:4,label:'29 Jun',d:{mon:{t:'B',run:'6km Easy Run'},tue:{t:'C',run:'5km Pyramid Set'},wed:{rest:'active'},thu:{t:'D'},fri:{t:'E'},sat:{run:'10km Long Run'},sun:{rest:'full'}}},
+ {wk:5,label:'6 Jul',d:{mon:{t:'F',run:'8km Easy Run'},tue:{t:'A',run:'7.1km Rolling 300s'},wed:{rest:'active'},thu:{t:'B'},fri:{t:'C'},sat:{run:'12km Long Run'},sun:{rest:'full'}}},
+ {wk:6,label:'13 Jul',d:{mon:{t:'D',run:'8km Easy Run'},tue:{t:'E',run:'6km 500m Madness'},wed:{rest:'active'},thu:{t:'F'},fri:{t:'A'},sat:{run:'13km Long Run'},sun:{rest:'full'}}},
+ {wk:7,label:'20 Jul',d:{mon:{t:'B',run:'7km Easy Run'},tue:{t:'C',run:'7.8km Prog. Mile Repeats'},wed:{rest:'active'},thu:{t:'D'},fri:{t:'E'},sat:{run:'11km Long Run'},sun:{rest:'full'}}},
+ {wk:8,label:'27 Jul',d:{mon:{t:'F',run:'5km Easy Run'},tue:{t:'A',run:"7km Race Pace K's"},wed:{rest:'active'},thu:{t:'B'},fri:{t:'C'},sat:{rest:'full',note:'Recuperação pré-prova · véspera da 8K'},sun:{race:'8K RACE DAY (02/08)'}}}
 ];
 function mondayOf(d){const x=new Date(d);x.setHours(0,0,0,0);const dow=(x.getDay()+6)%7;x.setDate(x.getDate()-dow);return x;}
 function mondayISO(d){return mondayOf(d).toISOString().slice(0,10);}
@@ -2382,12 +2427,12 @@ function buildMarvelWeek(date){
   const wk=cal[idx];
   const order=['mon','tue','wed','thu','fri','sat','sun'];
   const days=order.map(k=>marvelDay(k,wk.d[k]||{rest:'full'}));
-  return {name:useHyrox?'Marvel 4× + Hyrox':'Marvel 4× + Runna 5K',marvel:true,v:3,week:wk.wk,weekLabel:wk.label,weekStart:wkMon,blockWeeks:cal.length,days:days};
+  return {name:useHyrox?'Marvel 4× + Hyrox':'Marvel 4× + Runna 5K',marvel:true,v:4,week:wk.wk,weekLabel:wk.label,weekStart:wkMon,blockWeeks:cal.length,days:days};
 }
 // Build the plan, roll it forward when a new week starts, or rebuild if the structure version changed
 function ensureMarvelWeek(){
   const cur=mondayISO(new Date()),p=loadProgram();
-  if(!p||!p.marvel||p.v!==3||p.weekStart!==cur){saveProgram(buildMarvelWeek(new Date()));}
+  if(!p||!p.marvel||p.v!==4||p.weekStart!==cur){saveProgram(buildMarvelWeek(new Date()));}
   else programState=p;
 }
 function generateProgram(){return buildMarvelWeek(new Date());}
@@ -2779,38 +2824,74 @@ function renderHydration(){
 
 // ===== SUPPLEMENT PROTOCOL =====
 const SUPP_KEY='vital_supps_v1';
-const SUPP_GROUPS=[
+const SUPP_DEFAULT=[
   {group:'Pre-training',items:[
-    {key:'lcarnitine',name:'L-Carnitine'},
-    {key:'electrolytes_pre',name:'Electrolytes (High5)'}]},
+    {name:'L-Carnitine'},
+    {name:'Electrolytes (High5)'}]},
   {group:'Post-training',items:[
-    {key:'creatine',name:'Creatine Creapure',dose:'5g'},
-    {key:'omega3',name:'Omega-3',dose:'2g (high EPA)'},
-    {key:'probiotic',name:'Probiotic'},
-    {key:'proceive',name:'Proceive (breastfeeding multi)'},
-    {key:'brewers',name:'Brewer’s yeast',dose:'15g'}]},
+    {name:'Creatine Creapure',dose:'5g'},
+    {name:'Omega-3',dose:'2g (high EPA)'},
+    {name:'Probiotic'},
+    {name:'Proceive (breastfeeding multi)'},
+    {name:'Brewer’s yeast',dose:'15g'}]},
   {group:'Evening',items:[
-    {key:'magnesium',name:'Magnesium Glycinate',dose:'400mg'},
-    {key:'inositol',name:'Inositol',dose:'200mg'},
-    {key:'iron',name:'Iron'}]},
+    {name:'Magnesium Glycinate',dose:'400mg'},
+    {name:'Inositol',dose:'200mg'},
+    {name:'Iron'}]},
   {group:'Paused',paused:true,items:[
-    {key:'d3',name:'Vitamin D3',dose:'10,000 IU — paused (high serum levels)'}]}
+    {name:'Vitamin D3',dose:'10,000 IU — paused (high serum levels)'}]}
 ];
+function loadSupps(){ try{const s=localStorage.getItem(SUPP_KEY);if(s){const p=JSON.parse(s);if(Array.isArray(p))return p;}}catch(e){} return JSON.parse(JSON.stringify(SUPP_DEFAULT)); }
+function saveSuppsData(g){ localStorage.setItem(SUPP_KEY,JSON.stringify(g)); }
+let _suppEdit=false,_suppDraft=null;
 function renderSupps(){
-  const list=$('suppsList');
-  if(list){
-    let html='';
-    SUPP_GROUPS.forEach(g=>{
-      html+=`<div class="supp-group">${g.group}</div>`;
-      g.items.forEach(it=>{
-        const dose=it.dose?` <span class="supp-dose">· ${it.dose}</span>`:'';
-        const icon=g.paused?'⏸':'•';
-        html+=`<div class="li${g.paused?' supp-paused':''}"><span class="e" style="font-size:15px">${icon}</span><div><b>${it.name}</b>${dose}${g.paused?' <span class="pill">paused</span>':''}</div></div>`;
-      });
+  const list=$('suppsList'); if(!list) return;
+  const cta=$('ctaSuppsSummary');
+  if(cta){ let n=0; loadSupps().forEach(g=>{ if(!g.paused)(g.items||[]).forEach(it=>{ if(it.name&&it.name.trim())n++; }); }); cta.textContent=n?`${n} in your stack · tap to view & edit`:'Add your supplements'; }
+  if(_suppEdit){ list.innerHTML=_suppEditHtml(); return; }
+  const groups=loadSupps();
+  let html='';
+  groups.forEach(g=>{
+    if(!g.items||!g.items.length) return;
+    html+=`<div class="supp-group">${escHtml(g.group)}</div>`;
+    g.items.forEach(it=>{
+      const dose=it.dose?` <span class="supp-dose">· ${escHtml(it.dose)}</span>`:'';
+      const icon=g.paused?'⏸':'•';
+      html+=`<div class="li${g.paused?' supp-paused':''}"><span class="e" style="font-size:15px">${icon}</span><div><b>${escHtml(it.name)}</b>${dose}${g.paused?' <span class="pill">paused</span>':''}</div></div>`;
     });
-    list.innerHTML=html;
-  }
+  });
+  html+=`<button class="ghost" style="width:100%;margin-top:16px" onclick="editSupps()">✏️ Edit supplements</button>`;
+  list.innerHTML=html;
 }
+function _suppEditHtml(){
+  let html='';
+  _suppDraft.forEach((g,gi)=>{
+    html+=`<div class="edit-grp">${escHtml(g.group)}${g.paused?' · not taking right now':''}</div>`;
+    (g.items||[]).forEach((it,ii)=>{
+      html+=`<div class="edit-row">
+        <input type="text" id="supp_${gi}_${ii}_n" value="${escAttr(it.name)}" placeholder="Supplement" style="flex:1.5" />
+        <input type="text" id="supp_${gi}_${ii}_d" value="${escAttr(it.dose)}" placeholder="Dose (optional)" style="flex:1" />
+        <button class="edit-x" onclick="suppItemDel(${gi},${ii})" aria-label="Delete">×</button>
+      </div>`;
+    });
+    html+=`<button class="ghost add-row" onclick="suppItemAdd(${gi})">+ Add to ${escHtml(g.group)}</button>`;
+  });
+  html+=`<button class="primary" style="width:100%;margin-top:16px" onclick="saveSupps()">Save supplements</button>`;
+  html+=`<button class="ghost" style="width:100%;margin-top:8px" onclick="cancelSupps()">Cancel</button>`;
+  return html;
+}
+function _suppCapture(){
+  if(!_suppDraft)return;
+  _suppDraft.forEach((g,gi)=>{ (g.items||[]).forEach((it,ii)=>{
+    const n=$(`supp_${gi}_${ii}_n`),d=$(`supp_${gi}_${ii}_d`);
+    if(n)it.name=n.value.trim(); if(d)it.dose=d.value.trim();
+  }); });
+}
+function editSupps(){ _suppEdit=true; _suppDraft=loadSupps(); renderSupps(); }
+function suppItemAdd(gi){ _suppCapture(); _suppDraft[gi].items=_suppDraft[gi].items||[]; _suppDraft[gi].items.push({name:'',dose:''}); renderSupps(); }
+function suppItemDel(gi,ii){ _suppCapture(); _suppDraft[gi].items.splice(ii,1); renderSupps(); }
+function saveSupps(){ if(!_suppDraft){_suppEdit=false;renderSupps();return;} _suppCapture(); _suppDraft.forEach(g=>{ g.items=(g.items||[]).filter(it=>it.name&&it.name.trim()); }); saveSuppsData(_suppDraft); _suppEdit=false; _suppDraft=null; renderSupps(); if(typeof toast==='function')toast('Supplements saved ✓'); }
+function cancelSupps(){ _suppEdit=false; _suppDraft=null; renderSupps(); }
 
 // ===== COACH CHAT (data-driven, offline smart-rules) =====
 function bandFromScore(s){return s>=80?'green':s>=62?'amber-high':s>=42?'amber':'red';}
@@ -3021,6 +3102,7 @@ function swipeNav(dir){ // swipe ONLY goes back from a drilled-in sub-page to it
   // Carb-plan day-type toggle
   $('dayTypeTog').querySelectorAll('.chip').forEach(c=>{
     c.onclick=()=>{
+      if(_carbEdit)_carbCapture();
       $('dayTypeTog').querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));
       c.classList.add('on');
       currentDayType=c.dataset.v;
