@@ -1983,6 +1983,11 @@ const LAB_MARKERS=[
 ];
 function loadLabs(){try{return JSON.parse(localStorage.getItem(LAB_KEY))||[];}catch(e){return [];}}
 function saveLabsData(a){localStorage.setItem(LAB_KEY,JSON.stringify(a));}
+// PDFs are too big for localStorage → store them in IndexedDB (large quota, works in the iOS PWA)
+function idbOpen(){return new Promise((res,rej)=>{const r=indexedDB.open('vital_pdfs',1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('pdfs'))r.result.createObjectStore('pdfs');};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+async function idbPut(key,val){const db=await idbOpen();return new Promise((res,rej)=>{const tx=db.transaction('pdfs','readwrite');tx.objectStore('pdfs').put(val,key);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);});}
+async function idbGet(key){const db=await idbOpen();return new Promise((res,rej)=>{const tx=db.transaction('pdfs','readonly');const rq=tx.objectStore('pdfs').get(key);rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error);});}
+async function idbDel(key){try{const db=await idbOpen();const tx=db.transaction('pdfs','readwrite');tx.objectStore('pdfs').delete(key);}catch(e){}}
 
 // ===== BEST-EFFORT PDF READER (blood tests) =====
 const LAB_FIND={
@@ -2077,17 +2082,12 @@ function saveLabs(){
     any=true;
   });
   if(!any){toast('Enter at least one blood marker value.');return;}
-  const entry={date,markers,pdfName:null,pdfData:null};
+  const entry={date,markers,pdfName:null,pdfId:null};
   const file=$('labPdf').files[0];
   const finish=()=>{
     const all=loadLabs();
     all.unshift(entry);
-    try{saveLabsData(all);}
-    catch(e){
-      entry.pdfData=null; // most likely a storage-quota issue from the PDF
-      try{saveLabsData(all);}catch(e2){}
-      toast('Saved your values, but the PDF was too large to store on this device. Your numbers and food guidance are kept.');
-    }
+    try{saveLabsData(all);}catch(e){toast('Couldn\'t save — your device storage may be full.');return;}
     renderLabResults(entry);
     renderLabHistory();
     LAB_MARKERS.forEach(m=>$('lab_'+m.key).value='');
@@ -2097,13 +2097,16 @@ function saveLabs(){
   };
   if(file){
     entry.pdfName=file.name;
+    const pdfId='labpdf_'+Date.now();
     const r=new FileReader();
-    r.onload=ev=>{entry.pdfData=ev.target.result;finish();};
-    r.onerror=finish;
+    r.onload=async ev=>{ try{ await idbPut(pdfId,ev.target.result); entry.pdfId=pdfId; }catch(e){ entry.pdfId=null; toast('Saved your values, but couldn\'t store the PDF on this device.'); } finish(); };
+    r.onerror=()=>{finish();};
     r.readAsDataURL(file);
   }else{finish();}
 }
+let _curLabPdf=null,_curLabPdfId=null;
 function renderLabResults(entry){
+  _curLabPdf=entry.pdfData||null;_curLabPdfId=entry.pdfId||null;
   const flagged=[],inrange=[];
   LAB_MARKERS.forEach(m=>{
     const d=entry.markers[m.key]; if(!d) return;
@@ -2128,6 +2131,7 @@ function renderLabResults(entry){
     html+=`<p class="hint" style="margin-top:12px">In range: ${inrange.map(i=>`${i.m.label} <span class="pill ok">ok</span>`).join(' &nbsp; ')}</p>`;
   }
   html+='<div class="callout warn" style="margin-top:14px"><b>Before you act:</b> anything flagged should be reviewed with your doctor — especially thyroid markers. Food helps, but it isn\'t a substitute for medical care.</div>';
+  if(entry.pdfData||entry.pdfId){html+=`<button class="ghost" style="width:100%;margin-top:12px" onclick="toggleLabPdf(this)">📄 View report PDF</button><div id="labPdfView" data-open="" style="margin-top:10px"></div>`;}
   html+='</div>';
   $('labResults').innerHTML=html;
 }
@@ -2147,12 +2151,43 @@ function renderLabHistory(){
   });
   $('labHistory').innerHTML=html;
 }
-function deleteLab(idx){const all=loadLabs();all.splice(idx,1);saveLabsData(all);renderLabHistory();if($('labResults'))$('labResults').innerHTML='';}
+function deleteLab(idx){const all=loadLabs();const e=all[idx];if(e&&e.pdfId)idbDel(e.pdfId);all.splice(idx,1);saveLabsData(all);renderLabHistory();if($('labResults'))$('labResults').innerHTML='';}
 function viewLab(idx){
   const all=loadLabs(); const e=all[idx]; if(!e) return;
-  renderLabResults(e);
-  if(e.pdfData){window.open(e.pdfData,'_blank');}
+  renderLabResults(e);          // shows values + (if a PDF is stored) a "View report PDF" button
   window.scrollTo(0,0);
+}
+function toggleLabPdf(btn){
+  const c=$('labPdfView'); if(!c) return;
+  if(c.getAttribute('data-open')==='1'){ c.innerHTML=''; c.setAttribute('data-open',''); if(btn)btn.textContent='📄 View report PDF'; return; }
+  c.setAttribute('data-open','1'); if(btn)btn.textContent='Hide report';
+  if(_curLabPdf){ renderLabPdfInline(c,_curLabPdf); }
+  else if(_curLabPdfId){ c.innerHTML='<p class="hint" style="margin:0">Loading report…</p>'; idbGet(_curLabPdfId).then(d=>{ if(d) renderLabPdfInline(c,d); else c.innerHTML='<p class="hint" style="margin:0">PDF not found on this device.</p>'; }).catch(()=>{c.innerHTML='<p class="hint" style="margin:0">Couldn\'t load the PDF.</p>';}); }
+  else c.innerHTML='<p class="hint" style="margin:0">No PDF stored for this test.</p>';
+}
+// Render a stored PDF (data URL) inline as page images — works inside the iOS home-screen app (window.open is blocked there)
+async function renderLabPdfInline(container,dataURL){
+  container.innerHTML='<p class="hint" style="margin:0">Loading report…</p>';
+  let lib;
+  try{ lib=await loadPdfJs(); }
+  catch(e){ container.innerHTML='<p class="hint" style="margin:0">Couldn\'t load the PDF viewer (needs internet).</p>'; return; }
+  try{
+    const b64=dataURL.split(',')[1]; const bin=atob(b64);
+    const bytes=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+    const pdf=await lib.getDocument({data:bytes}).promise;
+    container.innerHTML='';
+    const W=container.clientWidth||320, dpr=window.devicePixelRatio||1;
+    for(let n=1;n<=pdf.numPages;n++){
+      const page=await pdf.getPage(n);
+      const base=page.getViewport({scale:1});
+      const vp=page.getViewport({scale:(W/base.width)*dpr});
+      const canvas=document.createElement('canvas');
+      canvas.width=vp.width; canvas.height=vp.height;
+      canvas.style.cssText='width:100%;height:auto;border-radius:10px;margin-bottom:10px;box-shadow:var(--shadow);background:#fff';
+      await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
+      container.appendChild(canvas);
+    }
+  }catch(e){ container.innerHTML='<p class="hint" style="margin:0">Couldn\'t render this PDF.</p>'; }
 }
 
 // ===== TRAINING PROGRAM (PT-style) =====
