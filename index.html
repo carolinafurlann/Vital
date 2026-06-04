@@ -533,11 +533,15 @@
       <p class="hint">From Livity / Apple Health. Syncs with Body → Daily metrics. Leave blank if you'd rather just go on feel.</p>
       <div class="row">
         <div><label><b>Recovery %</b></label><input type="number" id="ciRec" placeholder="82" min="0" max="100" /></div>
-        <div><label><b>Sleep (h)</b></label><input type="number" id="ciSleepH" placeholder="7.8" step="0.1" /></div>
+        <div><label><b>HRV (ms)</b></label><input type="number" id="ciHrv" placeholder="58" step="0.1" /></div>
       </div>
       <div class="row">
-        <div><label><b>HRV (ms)</b></label><input type="number" id="ciHrv" placeholder="58" step="0.1" /></div>
         <div><label><b>RHR (bpm)</b></label><input type="number" id="ciRhr" placeholder="58" /></div>
+        <div><label><b>SpO₂ (%)</b></label><input type="number" id="ciSpo2" placeholder="97" min="0" max="100" /></div>
+      </div>
+      <div class="row">
+        <div><label><b>Deep sleep (h)</b></label><input type="number" id="ciDeep" placeholder="1.4" step="0.1" /></div>
+        <div><label><b>REM sleep (h)</b></label><input type="number" id="ciRem" placeholder="1.6" step="0.1" /></div>
       </div>
     </div>
     <div id="formCard" class="card">
@@ -944,7 +948,7 @@
     <button class="ghost" style="margin:4px 0 2px" onclick="showTab('body',document.querySelector('nav button[data-tab=&quot;body&quot;]'))">← Back to Body</button>
     <div class="card">
       <h2>🌙 Your sleep baseline</h2>
-      <div class="li"><span class="e">🛏️</span><div><b>19:30 → 05:00</b><br><span>9.5 h target · circadian-aligned · no alarm</span></div></div>
+      <div class="li"><span class="e">🛏️</span><div><b>8 h sleep target</b><br><span>Suggested window 19:30 → 05:00 (flexible) · no alarm</span></div></div>
       <div id="sleepBaseline"></div>
       <p class="hint" style="margin:10px 0 0">Log last night's sleep in <b>Body → Daily metrics</b> (or your morning check-in) to compare here.</p>
     </div>
@@ -1266,18 +1270,17 @@ function compute(){
   if(!profile){toast('Complete your profile first');return;}
 
   // ---- Save watch numbers entered on the check-in (connected to Daily metrics) ----
-  const ciMap={recovery:'ciRec',sleepH:'ciSleepH',hrv:'ciHrv',rhr:'ciRhr'};
+  const ciMap={recovery:'ciRec',hrv:'ciHrv',rhr:'ciRhr',spo2:'ciSpo2',deepH:'ciDeep',remH:'ciRem'};
   const allH=(typeof loadHealth==='function')?loadHealth():{};
   const todayH=allH[todayKey()]||{}; let savedAny=false;
   Object.entries(ciMap).forEach(([k,id])=>{const el=$(id);if(el&&el.value!==''){const v=parseFloat(el.value);if(!isNaN(v)){todayH[k]=v;savedAny=true;}}});
+  // Sleep hours: single source = the "How you feel" slider below (watch Sleep input removed). Persist for the metrics dashboard + sleep ring.
+  const sleepH=+$('sleepH').value;
+  todayH.sleepH=sleepH; savedAny=true;
   if(savedAny){allH[todayKey()]=todayH;localStorage.setItem('vital_health_v1',JSON.stringify(allH));if(typeof renderMetrics==='function')renderMetrics();}
 
   // ---- Objective data from your watch (Body → Daily metrics), if logged today ----
   const health=(typeof loadHealth==='function')?(loadHealth()[todayKey()]||{}):{};
-  const watchSleep=(health.sleepH!=null)?health.sleepH:null;
-
-  // ---- Subjective: how you feel (morning check-in) ----
-  const sleepH = watchSleep!=null ? watchSleep : +$('sleepH').value;  // prefer watch sleep when available
   const sleepQ=+$('sleepQ').value,energy=+$('energy').value,
         sore=+$('sore').value,mood=+$('mood').value,stress=+$('stress').value,
         mot=+$('mot').value,nurse=+$('nurse').value;
@@ -1314,7 +1317,7 @@ function compute(){
   if(health.recovery!=null){ objective=Math.round(health.recovery); }
   else {
     const comps=[];
-    if(watchSleep!=null) comps.push(clamp(watchSleep/9.5,0,1));
+    comps.push(clamp(sleepH/SLEEP_BASELINE_H,0,1));
     if(health.rhr!=null && profile.rhr) comps.push(clamp(1-(health.rhr-profile.rhr)*0.03,0,1));
     if(comps.length) objective=Math.round(comps.reduce((a,b)=>a+b,0)/comps.length*100);
   }
@@ -1351,7 +1354,7 @@ function compute(){
 
   // Factors
   let factors=[
-    {name:'Sleep',val:nSleep,raw:sleepH.toFixed(1)+'h'+(watchSleep!=null?' · watch':'')},
+    {name:'Sleep',val:nSleep,raw:sleepH.toFixed(1)+'h'},
     {name:'Energy',val:nEnergy,raw:energy+'/5'},
     {name:'Nursing load',val:nNurse,raw:nurse+'x/night'},
   ];
@@ -1398,7 +1401,7 @@ function openCheckin(){
   // Prefill watch fields from today's Daily metrics (so no double entry)
   const h=(typeof loadHealth==='function')?(loadHealth()[todayKey()]||{}):{};
   const set=(id,v)=>{const el=$(id);if(el)el.value=(v==null?'':v);};
-  set('ciRec',h.recovery);set('ciSleepH',h.sleepH);set('ciHrv',h.hrv);set('ciRhr',h.rhr);
+  set('ciRec',h.recovery);set('ciHrv',h.hrv);set('ciRhr',h.rhr);set('ciSpo2',h.spo2);set('ciDeep',h.deepH);set('ciRem',h.remH);
   showTab('checkin');
 }
 
@@ -1534,7 +1537,7 @@ function renderHome(){
   if($('planFuel'))$('planFuel').textContent=([1,2,4,5,6].includes(new Date(dk+'T12:00:00Z').getUTCDay())?'2,900':'2,500')+' kcal';
   // recovery + sleep rings
   renderStatRing('recRing','recRingV','recStats',health.recovery,[['HRV',health.hrv!=null?Math.round(health.hrv):null,'ms'],['RHR',health.rhr,'bpm'],['SpO₂',health.spo2!=null?Math.round(health.spo2):null,'%']],'var(--green)');
-  const slpPct=health.sleepScore!=null?health.sleepScore:(health.sleepH!=null?Math.round(clamp(health.sleepH/9.5,0,1)*100):null);
+  const slpPct=health.sleepScore!=null?health.sleepScore:(health.sleepH!=null?Math.round(clamp(health.sleepH/SLEEP_BASELINE_H,0,1)*100):null);
   renderStatRing('slpRing','slpRingV','slpStats',slpPct,[['Time',fmtH(health.sleepH),''],['Deep',fmtH(health.deepH),''],['REM',fmtH(health.remH),'']],'var(--blue)');
   // weekly trend
   renderHomeTrend(entries,weekIsos);
@@ -1761,7 +1764,7 @@ function renderLactationCorr(){
 
 // ===== APPLE HEALTH (manual bridge) + SLEEP BASELINE =====
 const HEALTH_KEY='vital_health_v1';
-const SLEEP_BASELINE_H=9.5; // 19:30 → 05:00
+const SLEEP_BASELINE_H=8; // ~8 h asleep target; the 19:30→05:00 window is a flexible suggestion
 // field id → storage key (+ aliases for clipboard parsing)
 const HEALTH_FIELDS=[
   {id:'mRec',k:'recovery',aliases:['recovery']},
@@ -1788,7 +1791,7 @@ function applyHealthText(txt){
   });
   if(filled){
     all[todayKey()]=today; localStorage.setItem(HEALTH_KEY,JSON.stringify(all));
-    const ci={recovery:'ciRec',sleepH:'ciSleepH',hrv:'ciHrv',rhr:'ciRhr'};
+    const ci={recovery:'ciRec',hrv:'ciHrv',rhr:'ciRhr',spo2:'ciSpo2',deepH:'ciDeep',remH:'ciRem'};
     Object.keys(ci).forEach(k=>{const el=$(ci[k]);if(el&&today[k]!=null)el.value=today[k];});
     if(typeof renderMetrics==='function')renderMetrics();
     if(typeof renderSleepBaseline==='function')renderSleepBaseline();
@@ -1868,14 +1871,14 @@ function renderSleepBaseline(){
   let recent;
   if(keys.length){recent=keys.slice(-7).map(k=>all[k].sleepH);}
   else{const e=loadEntries().slice(-7).map(x=>x.sleepH).filter(v=>v!=null);recent=e;}
-  if(!recent.length){el.innerHTML='<p class="hint" style="margin:10px 0 0">Log last night below (or do your check-in) to compare against your 9.5h baseline.</p>';return;}
+  if(!recent.length){el.innerHTML='<p class="hint" style="margin:10px 0 0">Log last night below (or do your check-in) to compare against your '+SLEEP_BASELINE_H+'h target.</p>';return;}
   const avg=recent.reduce((a,b)=>a+b,0)/recent.length;
   const diff=avg-SLEEP_BASELINE_H;
   const last=recent[recent.length-1];
   const lastDiff=last-SLEEP_BASELINE_H;
   const word=diff<=-1?'running a deficit':diff<-0.25?'a touch under':Math.abs(diff)<=0.25?'on baseline':'above baseline';
   const cls=diff<=-1?'warn':'';
-  el.innerHTML=`<div class="callout ${cls}" style="margin-top:12px"><b>Last night: ${last}h</b> (${lastDiff>=0?'+':''}${lastDiff.toFixed(1)}h vs 9.5h). Your ${recent.length>1?recent.length+'-night average is <b>'+avg.toFixed(1)+'h</b> — '+word:'baseline target is 9.5h'}.${diff<=-1?' Chronic short sleep blunts recovery and supply — protect that 19:30 bedtime.':''}</div>`;
+  el.innerHTML=`<div class="callout ${cls}" style="margin-top:12px"><b>Last night: ${last}h</b> (${lastDiff>=0?'+':''}${lastDiff.toFixed(1)}h vs ${SLEEP_BASELINE_H}h). Your ${recent.length>1?recent.length+'-night average is <b>'+avg.toFixed(1)+'h</b> — '+word:'target is '+SLEEP_BASELINE_H+'h'}.${diff<=-1?' Chronic short sleep blunts recovery and supply — lean toward an earlier night (~19:30).':''}</div>`;
 }
 
 // ===== TRENDS & CALCULATIONS =====
@@ -2605,9 +2608,12 @@ function _tlEditorHtml(d){
     <button class="ghost" style="margin:0 0 14px" onclick="closeSessEdit()">← Back to log</button>
     <label><b>Session name</b></label>
     <input type="text" value="${escAttr(d.title)}" oninput="_editDraft.title=this.value" />
-    <div class="row" style="margin-top:2px">
-      <div><label><b>Date</b></label><input type="date" value="${d.date}" onchange="_editDraft.date=this.value" /></div>
-      <div><label><b>Type</b></label><div class="toggle"><div class="chip${isS?' on':''}" onclick="_editDraft.type='strength';renderTrainLog()">🏋️</div><div class="chip${!isS?' on':''}" onclick="_editDraft.type='run';renderTrainLog()">🏃</div></div></div>
+    <label style="margin-top:6px"><b>Date</b></label>
+    <input type="date" value="${d.date}" onchange="_editDraft.date=this.value" />
+    <label><b>Type</b></label>
+    <div class="toggle">
+      <div class="chip${isS?' on':''}" onclick="_editDraft.type='strength';renderTrainLog()">🏋️ Strength</div>
+      <div class="chip${!isS?' on':''}" onclick="_editDraft.type='run';renderTrainLog()">🏃 Run</div>
     </div>
     ${isS?`<h3 style="margin:18px 0 8px;font-size:14px">Exercises — edit your actual sets/reps/load</h3>${ex}`:'<p class="hint" style="margin:14px 0 0">Run session — no exercises to edit.</p>'}
     <button class="primary" style="width:100%;margin-top:18px" onclick="saveSessEdit()">Save session</button>
@@ -2845,7 +2851,7 @@ function chatRecover(c){
   if(h&&(h.recovery!=null||h.hrv!=null||h.sleepH!=null)){
     if(h.recovery!=null) parts.push(`Recovery <b>${h.recovery}%</b>${h.recovery>=67?' — green, you\'re ready to push.':h.recovery>=34?' — moderate; train smart.':' — low; keep it easy today.'}`);
     if(h.hrv!=null) parts.push(`HRV ${h.hrv}ms${h.rhr!=null?', RHR '+h.rhr+'bpm':''}.`);
-    if(h.sleepH!=null) parts.push(`Slept ${h.sleepH}h (vs 9.5h baseline)${h.deepH!=null?', '+h.deepH+'h deep':''}.`);
+    if(h.sleepH!=null) parts.push(`Slept ${h.sleepH}h (vs ${SLEEP_BASELINE_H}h target)${h.deepH!=null?', '+h.deepH+'h deep':''}.`);
     return parts.join(' ');
   }
   if(!c.todayEntry) return "Log today's numbers in <b>Body → Daily metrics</b> (recovery, HRV, sleep) or do your morning check-in, and I'll read your recovery straight.";
