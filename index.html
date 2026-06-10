@@ -211,6 +211,10 @@
   .msg.user{align-self:flex-end;background:var(--grad);color:var(--on-accent);border-bottom-right-radius:5px;font-weight:600}
   .msg b{color:var(--accent)}
   .msg.user b{color:#fff}
+  .msg.urgent{border:1px solid var(--red);background:rgba(248,113,113,.12)}
+  .ci-logged{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 2px}
+  .ci-logged .chip2{font-size:11.5px;background:var(--card2);border:1px solid var(--line);color:var(--text);padding:5px 10px;border-radius:999px}
+  .ci-logged .chip2 b{color:var(--accent)}
   .chat-chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}
   .chat-chip{border:1px solid var(--line);background:var(--card2);color:var(--text);border-radius:20px;
     padding:8px 13px;font-size:12.5px;cursor:pointer;transition:all .15s ease}
@@ -541,6 +545,26 @@
   <!-- Morning check-in form (drill-in from Today) -->
   <section class="tab" id="tab-checkin">
     <button class="ghost" style="margin:4px 0 2px" onclick="showTab('today',document.querySelector('nav button[data-tab=&quot;today&quot;]'))">← Back to Today</button>
+
+    <!-- Conversational AI check-in -->
+    <div class="card" id="ciCard">
+      <h2>🌙 Daily check-in</h2>
+      <p class="hint">Tell me about your night in your own words — I'll log it and read your recovery against a postpartum baseline, not an elite-athlete one. <span id="ciReconfig" style="display:none">· <a href="#" onclick="ciReconfigure();return false">⚙︎ Connect</a></span></p>
+      <div class="chat-log" id="ciChatLog" style="max-height:280px"></div>
+      <div id="ciLogged"></div>
+      <div id="ciSetup" style="display:none">
+        <p class="hint" style="margin:0 0 6px">One-time setup — paste your check-in service URL (see <b>server/README.md</b>). Your check-in text goes to Claude to be read; nothing is stored on the server.</p>
+        <input type="text" id="ciProxyInput" placeholder="https://vital-checkin.your-subdomain.workers.dev" />
+        <button class="primary" style="margin-top:6px" onclick="ciSaveProxy()">Save connection</button>
+      </div>
+      <div class="chat-input" id="ciInputRow">
+        <input type="text" id="ciChatInput" placeholder="e.g. Up 3 times, ~5 broken hours, feeling wiped" onkeydown="if(event.key==='Enter')ciSend()" />
+        <button class="primary" onclick="ciSend()">Send</button>
+      </div>
+      <p class="hint" id="ciStatus" style="margin:8px 0 0"></p>
+    </div>
+    <p class="hint" style="text-align:center;margin:2px 0 -2px;opacity:.7">— or log it manually below —</p>
+
     <div class="card">
       <h2>🌙 Last night (from your watch)</h2>
       <p class="hint">From Livity / Apple Health. Syncs with Body → Daily metrics. Leave blank if you'd rather just go on feel.</p>
@@ -1201,7 +1225,7 @@ function backupReminder(){
   if(days>14)setTimeout(()=>toast('💾 Time to back up — Profile → Backup → Download. Keep a copy in iCloud/email so a lost phone never loses your data.'),2600);
 }
 // ===== BACKUP / RESTORE =====
-const VITAL_KEYS=['vital_profile_v2','vital_entries_v2','vital_progress_v2','vital_labs_v1','vital_program_v1','vital_program_log_v1','vital_sessions_v1','vital_health_v1','vital_carb_v1','vital_supps_v1','vital_theme'];
+const VITAL_KEYS=['vital_profile_v2','vital_entries_v2','vital_progress_v2','vital_labs_v1','vital_program_v1','vital_program_log_v1','vital_sessions_v1','vital_health_v1','vital_carb_v1','vital_supps_v1','vital_ai_proxy','vital_theme'];
 const BACKUP_STAMP_KEY='vital_last_backup';
 function exportData(){
   const bundle={__vital_backup__:true,version:1,exportedAt:new Date().toISOString(),data:{}};
@@ -1275,11 +1299,12 @@ function showTab(name,btn){
   // Only highlight if the trigger is a nav button (the avatar opens Profile, which has no nav entry)
   if(btn && btn.closest && btn.closest('nav')) btn.classList.add('on');
   if(name==='today'){homeSelDate=null; if(typeof renderHome==='function')renderHome();}
+  if(name==='checkin'&&typeof ciInit==='function')ciInit();
   window.scrollTo(0,0);
 }
 
 // ===== READINESS BRAIN =====
-function compute(){
+function compute(opts){
   if(!profile){toast('Complete your profile first');return;}
 
   // ---- Save watch numbers entered on the check-in (connected to Daily metrics) ----
@@ -1406,9 +1431,13 @@ function compute(){
   if(typeof renderHome==='function')renderHome();
   if(typeof renderCoachToday==='function')renderCoachToday();
 
+  // Conversational check-in calls compute({stay:true}) — log + score silently, stay in the chat.
+  if(opts&&opts.stay){ return score; }
+
   $('resultCard').style.display='block';
   if($('todayEmpty'))$('todayEmpty').style.display='none';
   showTab('today',document.querySelector('nav button[data-tab="today"]'));
+  return score;
 }
 function openCheckin(){
   // Prefill watch fields from today's Daily metrics (so no double entry)
@@ -1416,6 +1445,94 @@ function openCheckin(){
   const set=(id,v)=>{const el=$(id);if(el)el.value=(v==null?'':v);};
   set('ciRec',h.recovery);set('ciHrv',h.hrv);set('ciRhr',h.rhr);set('ciSpo2',h.spo2);set('ciDeep',h.deepH);set('ciRem',h.remH);
   showTab('checkin');
+}
+
+// ===== CONVERSATIONAL DAILY CHECK-IN (AI, via your proxy) =====
+let _ciHistory=[];
+function ciProxy(){return (localStorage.getItem('vital_ai_proxy')||'').trim();}
+function ciSaveProxy(){
+  const el=$('ciProxyInput'); const v=el?el.value.trim():'';
+  if(!/^https?:\/\/.+/.test(v)){ if(typeof toast==='function')toast('Paste the full https:// URL of your check-in service'); return; }
+  localStorage.setItem('vital_ai_proxy',v);
+  if(typeof toast==='function')toast('Check-in connected ✓');
+  ciInit();
+}
+function ciReconfigure(){ const s=$('ciSetup'),r=$('ciInputRow'),i=$('ciProxyInput'); if(i)i.value=ciProxy(); if(s)s.style.display='block'; if(r)r.style.display='none'; }
+function ciAppend(who,text){
+  const log=$('ciChatLog'); if(!log)return null;
+  const d=document.createElement('div'); d.className='msg '+who; d.textContent=text; // textContent: never render HTML from a model reply
+  log.appendChild(d); log.scrollTop=log.scrollHeight; return d;
+}
+function ciInit(){
+  const log=$('ciChatLog'); if(!log)return;
+  const configured=!!ciProxy();
+  const setup=$('ciSetup'), row=$('ciInputRow'), recon=$('ciReconfig');
+  if(setup)setup.style.display=configured?'none':'block';
+  if(row)row.style.display=configured?'flex':'none';
+  if(recon)recon.style.display=configured?'inline':'none';
+  if(configured && !log.children.length){
+    const name=(typeof profile!=='undefined'&&profile&&profile.name)?profile.name.split(' ')[0]:'';
+    ciAppend('coach','How’d the night go'+(name?(', '+name):'')+'? 💛 Tell me in your own words — sleep, wake-ups, how you’re feeling — and I’ll log it and read your day.');
+  }
+}
+function ciGatherContext(){
+  const lines=[];
+  try{ if(typeof profile!=='undefined'&&profile&&profile.postpartumWeeks!=null) lines.push('Postpartum ~'+profile.postpartumWeeks+' weeks, breastfeeding. Sleep target '+(typeof SLEEP_BASELINE_H!=='undefined'?SLEEP_BASELINE_H:8)+'h.'); }catch(e){}
+  try{
+    const es=(typeof loadEntries==='function')?loadEntries().slice(-10):[];
+    es.forEach(e=>{ lines.push(e.date+': readiness '+e.score+', sleep '+e.sleepH+'h, wake-ups '+e.nurse+', mood '+e.mood+'/5, energy '+e.energy+'/5'+(e.yday?(', trained '+e.yday+' the day before'):'')); });
+  }catch(e){}
+  try{
+    const h=(typeof loadHealth==='function')?(loadHealth()[todayKey()]||null):null;
+    if(h){ const b=[]; if(h.recovery!=null)b.push('recovery '+h.recovery+'%'); if(h.rhr!=null)b.push('RHR '+h.rhr+'bpm'); if(h.hrv!=null)b.push('HRV '+h.hrv+'ms'); if(b.length)lines.push("Today's watch: "+b.join(', ')); }
+  }catch(e){}
+  return lines.join('\n');
+}
+function ciShowLogged(summary){
+  const el=$('ciLogged'); if(!el)return;
+  if(!summary){el.innerHTML='';return;}
+  el.innerHTML='<div class="ci-logged"><span class="chip2">📝 Logged</span>'+summary.split(' · ').map(s=>'<span class="chip2">'+escHtml(s)+'</span>').join('')+'</div>';
+}
+function ciApplyLogged(g){
+  const parts=[];
+  const setRange=(id,v,min,max,half)=>{
+    if(v==null||isNaN(+v))return null;
+    let n=Math.max(min,Math.min(max,+v)); n=half?Math.round(n*2)/2:Math.round(n);
+    const el=$(id); if(el){ el.value=n; try{el.dispatchEvent(new Event('input'));}catch(e){} }
+    return n;
+  };
+  let v;
+  if((v=setRange('sleepH',g.sleepH,3,10,true))!=null) parts.push(v+'h sleep');
+  if((v=setRange('nurse',g.nurse,0,8,false))!=null) parts.push(v+' wake-up'+(v===1?'':'s'));
+  if((v=setRange('sleepQ',g.sleepQ,1,5,false))!=null) parts.push('sleep '+v+'/5');
+  if((v=setRange('energy',g.energy,1,5,false))!=null) parts.push('energy '+v+'/5');
+  if((v=setRange('sore',g.sore,1,5,false))!=null) parts.push('soreness '+v+'/5');
+  if((v=setRange('mood',g.mood,1,5,false))!=null) parts.push('mood '+v+'/5');
+  if((v=setRange('stress',g.stress,1,5,false))!=null) parts.push('stress '+v+'/5');
+  if((v=setRange('mot',g.mot,1,5,false))!=null) parts.push('motivation '+v+'/5');
+  if(g.yday && ['rest','easy','moderate','hard'].indexOf(g.yday)>=0){ try{yday=g.yday;}catch(e){} const tog=$('ydayTog'); if(tog)tog.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c.dataset.v===g.yday)); parts.push('yesterday '+g.yday); }
+  if(parts.length && typeof compute==='function'){ try{ compute({stay:true}); }catch(e){} }
+  return parts.join(' · ');
+}
+async function ciSend(){
+  const proxy=ciProxy(); if(!proxy){ ciReconfigure(); return; }
+  const input=$('ciChatInput'); const msg=input?input.value.trim():''; if(!msg)return;
+  ciAppend('user',msg); if(input)input.value='';
+  const status=$('ciStatus'); if(status)status.textContent='Reading your check-in…';
+  let res=null;
+  try{
+    const r=await fetch(proxy,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message:msg,context:ciGatherContext(),history:_ciHistory.slice()})});
+    res=await r.json();
+  }catch(e){ if(status)status.textContent=''; ciAppend('coach','I couldn’t reach the check-in service. Check your connection (and the URL under ⚙︎ Connect) — or log it on the sliders below.'); return; }
+  if(status)status.textContent='';
+  if(!res||res.error){ ciAppend('coach','The check-in service hit a problem'+((res&&res.detail)?(' ('+res.detail+')'):'')+'. You can still log it on the sliders below.'); return; }
+  _ciHistory.push({role:'user',content:msg});
+  const reply=(res.reply||'').toString();
+  const bubble=ciAppend('coach',reply||'Logged — take it easy today.');
+  if(res.urgent&&bubble)bubble.classList.add('urgent');
+  _ciHistory.push({role:'assistant',content:reply});
+  if(_ciHistory.length>16)_ciHistory=_ciHistory.slice(-16);
+  if(res.logged&&typeof res.logged==='object'){ const sum=ciApplyLogged(res.logged); if(sum)ciShowLogged(sum); }
 }
 
 function renderCoach(score){
