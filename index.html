@@ -171,7 +171,7 @@
   input::placeholder{color:var(--dim);opacity:0.6;}
   select{cursor:pointer;}
   /* Date pickers — match the app's typography; keep the calendar icon visible in dark mode */
-  input[type="date"]{cursor:pointer;font-weight:600;letter-spacing:.2px}
+  input[type="date"]{cursor:pointer;font-weight:600;letter-spacing:.2px;width:auto;max-width:100%;min-width:0}
   input[type="date"]::-webkit-datetime-edit{color:var(--text);font-family:inherit;font-weight:600}
   input[type="date"]::-webkit-datetime-edit-fields-wrapper{padding:0}
   input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;opacity:.6;filter:invert(1)}
@@ -2082,18 +2082,20 @@ async function idbGet(key){const db=await idbOpen();return new Promise((res,rej)
 async function idbDel(key){try{const db=await idbOpen();const tx=db.transaction('pdfs','readwrite');tx.objectStore('pdfs').delete(key);}catch(e){}}
 
 // ===== BEST-EFFORT PDF READER (blood tests) =====
+// Search terms are matched against an accent-stripped, lowercased copy of the PDF text,
+// so list them WITHOUT accents. Portuguese (PT/BR) + English variants for flexibility.
 const LAB_FIND={
-  ferritin:['ferritin'],
-  hemoglobin:['haemoglobin','hemoglobin','\\bhgb\\b','\\bhb\\b'],
-  iron:['serum iron','\\biron\\b'],
-  vitd:['25-hydroxy','25 hydroxy','25-oh','vitamin d','vit d'],
-  b12:['vitamin b12','\\bb ?12\\b','cobalamin'],
-  folate:['folate','folic acid'],
-  tsh:['\\btsh\\b','thyroid stimulating'],
-  ft4:['free t4','\\bft4\\b','free thyroxine'],
-  ft3:['free t3','\\bft3\\b'],
-  magnesium:['magnesium'],
-  glucose:['fasting glucose','glucose']
+  ferritin:['ferritina','ferritin'],
+  hemoglobin:['hemoglobina','haemoglobin','hemoglobin','\\bhgb\\b','\\bhb\\b'],
+  iron:['ferro serico','ferro no soro','\\bferro\\b','serum iron','\\biron\\b'],
+  vitd:['25 hidroxi','25-hidroxi','25 hydroxy','25-hydroxy','25 oh','25-oh','vitamina d','vitamin d','vit d','colecalciferol'],
+  b12:['vitamina b12','vitamin b12','\\bb ?12\\b','cobalamina','cobalamin'],
+  folate:['acido folico','folato','folate','folic acid','vitamina b9'],
+  tsh:['\\btsh\\b','tireoestimulante','tireo estimulante','tirotrofina','tireotrofina','hormona tireoestimulante','thyroid stimulating'],
+  ft4:['t4 livre','\\bt4l\\b','tiroxina livre','free t4','\\bft4\\b','free thyroxine'],
+  ft3:['t3 livre','\\bt3l\\b','triiodotironina livre','free t3','\\bft3\\b'],
+  magnesium:['magnesio','magnesium'],
+  glucose:['glicemia em jejum','glicemia','glicose','fasting glucose','glucose']
 };
 function loadPdfJs(){
   if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
@@ -2117,24 +2119,30 @@ async function readLabPdf(input){
     const pdf=await lib.getDocument({data:buf}).promise;
     let text='';
     for(let i=1;i<=pdf.numPages;i++){const pg=await pdf.getPage(i);const c=await pg.getTextContent();text+=' '+c.items.map(it=>it.str).join(' ');}
-    text=text.replace(/\s+/g,' ');
+    text=text.replace(/\s+/g,' ').trim();
+    // Normalize for matching: lowercase + strip accents → works for Portuguese & English reports.
+    const searchText=text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    if(searchText.replace(/[^a-z]/g,'').length<12){
+      setS('This PDF has no readable text — it looks like a scan or photo, so I can\'t auto-read it. Type your values in below (your PDF is still attached).');
+      return;
+    }
     let found=0; const names=[];
     LAB_MARKERS.forEach(m=>{
       const el=$('lab_'+m.key); if(!el||el.value!=='') return;
       const terms=LAB_FIND[m.key]||[m.label.toLowerCase()];
       for(const term of terms){
-        const mm=text.match(new RegExp(term+'[^0-9\\n]{0,30}?(\\d+(?:[.,]\\d+)?)','i'));
+        const mm=searchText.match(new RegExp(term+'[^0-9]{0,40}?(\\d+(?:[.,]\\d+)?)'));
         if(mm){
           let v=parseFloat(mm[1].replace(',','.'));
           // Vit D names contain "25" (25-OH); if we grabbed it, take the next number
-          if(m.key==='vitd' && Math.round(v)===25){const nm=text.slice(mm.index+mm[0].length).match(/(\d+(?:[.,]\d+)?)/);if(nm)v=parseFloat(nm[1].replace(',','.'));}
+          if(m.key==='vitd' && Math.round(v)===25){const nm=searchText.slice(mm.index+mm[0].length).match(/(\d+(?:[.,]\d+)?)/);if(nm)v=parseFloat(nm[1].replace(',','.'));}
           if(!isNaN(v)){el.value=v;found++;names.push(m.label);}
           break;
         }
       }
     });
     if(found) setS('✓ Auto-filled '+found+' value'+(found>1?'s':'')+': '+names.join(', ')+'. Please double-check each against your report (and the units) before saving — auto-reading isn\'t perfect.');
-    else setS('Couldn\'t pick out values from this PDF — labs format reports very differently. Type them in below (your PDF is still attached).');
+    else setS('Couldn\'t pick out values automatically — labs format reports very differently, and some are scans. Type them in below (your PDF is still attached).');
   }catch(e){ setS('Couldn\'t read this PDF — type the values in below (it\'s still attached).'); }
 }
 function renderLabFields(){
